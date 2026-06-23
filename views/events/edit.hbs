@@ -1,0 +1,312 @@
+<h1 class="mb-4">✏️ Редактирование мероприятия</h1>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card shadow">
+            <div class="card-body">
+                <form action="/events/edit/{{event.id}}" method="POST" id="eventForm">
+                    <!-- Основная информация -->
+                    <div class="mb-3">
+                        <label for="title" class="form-label">Название *</label>
+                        <input type="text" class="form-control" id="title" name="title" value="{{event.title}}" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Описание</label>
+                        <textarea class="form-control" id="description" name="description" rows="3">{{event.description}}</textarea>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="event_type_id" class="form-label">Тип мероприятия *</label>
+                                <select class="form-select" id="event_type_id" name="event_type_id" required>
+                                    <option value="">Выберите тип</option>
+                                    {{#each types}}
+                                        <option value="{{id}}" {{#if (eq ../event.event_type_id id)}}selected{{/if}}>{{name}}</option>
+                                    {{/each}}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="level" class="form-label">Уровень</label>
+                                <select class="form-select" id="level" name="level">
+                                    <option value="school" {{#if (eq event.level "school")}}selected{{/if}}>🏫 Школьное</option>
+                                    <option value="city" {{#if (eq event.level "city")}}selected{{/if}}>🏙️ Городское</option>
+                                    <option value="regional" {{#if (eq event.level "regional")}}selected{{/if}}>🌍 Региональное</option>
+                                    <option value="national" {{#if (eq event.level "national")}}selected{{/if}}>🇷🇺 Всероссийское</option>
+                                    <option value="international" {{#if (eq event.level "international")}}selected{{/if}}>🌐 Международное</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="department_id" class="form-label">Кафедра</label>
+                                <select class="form-select" id="department_id" name="department_id">
+                                    <option value="">Не выбрано</option>
+                                    {{#each departments}}
+                                        <option value="{{id}}" {{#if (eq ../event.department_id id)}}selected{{/if}}>{{name}}</option>
+                                    {{/each}}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="subject_id" class="form-label">Предмет</label>
+                                <select class="form-select" id="subject_id" name="subject_id">
+                                    <option value="">Не выбрано</option>
+                                    {{#each subjects}}
+                                        <option value="{{id}}" {{#if (eq ../event.subject_id id)}}selected{{/if}} data-department="{{department_id}}">{{name}}</option>
+                                    {{/each}}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="start_datetime" class="form-label">Дата и время начала *</label>
+                                <input type="datetime-local" class="form-control" id="start_datetime" name="start_datetime" value="{{formatDateForInput event.start_datetime}}" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="end_datetime" class="form-label">Дата и время окончания *</label>
+                                <input type="datetime-local" class="form-control" id="end_datetime" name="end_datetime" value="{{formatDateForInput event.end_datetime}}" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="location" class="form-label">Место проведения</label>
+                        <input type="text" class="form-control" id="location" name="location" value="{{event.location}}" placeholder="Например: Актовый зал, кабинет 301">
+                    </div>
+                    
+                    <!-- Блок: Аудитория -->
+                    <div class="card bg-light mb-3">
+                        <div class="card-header bg-info text-white">
+                            <h6 class="mb-0">👥 Кто увидит мероприятие?</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="target_audience_type" class="form-label">Тип аудитории *</label>
+                                        <select class="form-select" id="target_audience_type" name="target_audience_type" required>
+                                            <option value="class" {{#if (eq event.target_audience_type "class")}}selected{{/if}}>📚 Конкретный класс</option>
+                                            <option value="parallel" {{#if (eq event.target_audience_type "parallel")}}selected{{/if}}>📖 Целая параллель</option>
+                                            <option value="department" {{#if (eq event.target_audience_type "department")}}selected{{/if}}>🏛️ Кафедра</option>
+                                            <option value="specific_users" {{#if (eq event.target_audience_type "specific_users")}}selected{{/if}}>👤 Конкретные пользователи</option>
+                                            <option value="all" {{#if (eq event.target_audience_type "all")}}selected{{/if}}>🌍 Все пользователи</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3" id="audience_target_container">
+                                        <label for="target_audience_id" class="form-label">Выберите аудиторию</label>
+                                        <select class="form-select" id="target_audience_id" name="target_audience_id">
+                                            <option value="">Сначала выберите тип аудитории</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Блок: Награды (визуал, без сохранения в БД) -->
+                    <div class="card border-warning mb-3">
+                        <div class="card-header bg-warning text-dark">
+                            <h6 class="mb-0">🏆 Награды за участие (опционально)</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="checkbox" id="enable_rewards" name="enable_rewards" value="1">
+                                <label class="form-check-label" for="enable_rewards">
+                                    Начислять очки за участие
+                                </label>
+                            </div>
+                            
+                            <div id="rewards_block" style="display: none;">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="reward_type" class="form-label">Тип события</label>
+                                            <select class="form-select" id="reward_type" name="reward_type">
+                                                <option value="educational">📖 Учебное (всем участникам очки)</option>
+                                                <option value="competitive">🏅 Соревновательное (распределение мест)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6" id="places_block">
+                                        <div class="mb-3">
+                                            <label for="places_count" class="form-label">Количество призовых мест</label>
+                                            <select class="form-select" id="places_count" name="places_count">
+                                                <option value="1">1 место</option>
+                                                <option value="2">2 места</option>
+                                                <option value="3" selected>3 места</option>
+                                                <option value="4">4 места</option>
+                                                <option value="5">5 мест</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="alert alert-info small">
+                                    <p class="mb-0">
+                                        <strong>Как будут начисляться очки:</strong><br>
+                                        <span id="reward_description">📖 Учебное: все участники получат по 10 очков</span>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Для администратора -->
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="is_admin_event" name="is_admin_event" value="1" {{#if event.is_admin_event}}checked{{/if}}>
+                        <label class="form-check-label" for="is_admin_event">
+                            🔒 Только для администраторов (не видно ученикам и родителям)
+                        </label>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">✅ Сохранить изменения</button>
+                    <a href="/" class="btn btn-secondary">Отмена</a>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Подсказка справа -->
+    <div class="col-md-4">
+        <div class="card shadow">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">💡 Подсказка</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>Кто увидит мероприятие?</strong></p>
+                <ul class="small">
+                    <li><strong>📚 Класс</strong> — выберите конкретный класс (например, 5А)</li>
+                    <li><strong>📖 Параллель</strong> — выберите номер параллели (например, 5 класс)</li>
+                    <li><strong>🏛️ Кафедра</strong> — выберите кафедру (например, Математика)</li>
+                    <li><strong>👤 Пользователи</strong> — выберите конкретного пользователя</li>
+                    <li><strong>🌍 Все</strong> — увидят все пользователи системы</li>
+                </ul>
+                <hr>
+                <p><strong>🏆 Награды:</strong></p>
+                <ul class="small">
+                    <li>Включите, если хотите начислить очки участникам</li>
+                    <li>Для учебных мероприятий — очки получают все</li>
+                    <li>Для соревновательных — можно распределить места</li>
+                </ul>
+                <hr>
+                <p class="text-muted small">* — обязательные поля</p>
+                <div class="alert alert-warning small">
+                    ⚠️ После редактирования мероприятие снова отправляется на модерацию администратору.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // ---------- Данные из сервера ----------
+        const classes = {{{json classes}}};
+        const departments = {{{json departments}}};
+        const users = {{{json users}}};
+        const currentEvent = {{{json event}}}; // текущее мероприятие
+
+        // ---------- Аудитория ----------
+        const typeSelect = document.getElementById('target_audience_type');
+        const targetSelect = document.getElementById('target_audience_id');
+
+        function updateAudienceOptions(selectedId) {
+            const type = typeSelect.value;
+            targetSelect.innerHTML = '<option value="">Выберите...</option>';
+
+            if (!type) {
+                targetSelect.innerHTML = '<option value="">Сначала выберите тип аудитории</option>';
+                return;
+            }
+
+            let options = [];
+
+            if (type === 'class') {
+                options = classes.map(c => ({value: c.id, text: `${c.name} (${c.grade_level} класс)`}));
+            } else if (type === 'parallel') {
+                const parallels = [...new Set(classes.map(c => c.grade_level))].sort();
+                options = parallels.map(p => ({value: p, text: `${p} класс`}));
+            } else if (type === 'department') {
+                options = departments.map(d => ({value: d.id, text: d.name}));
+            } else if (type === 'specific_users') {
+                options = users.map(u => ({value: u.id, text: `${u.full_name} (${u.email})`}));
+            } else if (type === 'all') {
+                targetSelect.innerHTML = '<option value="">Все пользователи системы</option>';
+                return;
+            }
+
+            options.forEach(opt => {
+                const option = document.createElement('option');
+                option.value = opt.value;
+                option.textContent = opt.text;
+                if (selectedId !== undefined && String(opt.value) === String(selectedId)) {
+                    option.selected = true;
+                }
+                targetSelect.appendChild(option);
+            });
+        }
+
+        // Инициализация: установить выбранный тип и ID
+        if (currentEvent.target_audience_type) {
+            typeSelect.value = currentEvent.target_audience_type;
+            updateAudienceOptions(currentEvent.target_audience_id);
+        }
+
+        typeSelect.addEventListener('change', function() {
+            updateAudienceOptions();
+        });
+
+        // ---------- Награды (визуал) ----------
+        const enableCheckbox = document.getElementById('enable_rewards');
+        const rewardsBlock = document.getElementById('rewards_block');
+        const rewardTypeSelect = document.getElementById('reward_type');
+        const placesBlock = document.getElementById('places_block');
+        const rewardDescription = document.getElementById('reward_description');
+
+        function updateRewardsUI() {
+            if (enableCheckbox.checked) {
+                rewardsBlock.style.display = 'block';
+                updateRewardDescription();
+            } else {
+                rewardsBlock.style.display = 'none';
+            }
+        }
+
+        function updateRewardDescription() {
+            const type = rewardTypeSelect.value;
+            const places = document.getElementById('places_count').value;
+
+            if (type === 'educational') {
+                rewardDescription.textContent = '📖 Учебное: все участники получат по 10 очков';
+                placesBlock.style.display = 'none';
+            } else {
+                rewardDescription.textContent = `🏅 Соревновательное: участники распределят ${places} призовых мест (1 место — 50 очков, 2 место — 30 очков, 3 место — 20 очков, участники — 10 очков)`;
+                placesBlock.style.display = 'block';
+            }
+        }
+
+        enableCheckbox.addEventListener('change', updateRewardsUI);
+        rewardTypeSelect.addEventListener('change', updateRewardDescription);
+        document.getElementById('places_count').addEventListener('change', updateRewardDescription);
+
+        // Инициализация: если были сохранены настройки, можно включить блок (пока просто скрыт)
+        // В будущем можно будет сохранять эти данные в БД, но пока оставляем так.
+        updateRewardsUI();
+        updateRewardDescription();
+    });
+</script>

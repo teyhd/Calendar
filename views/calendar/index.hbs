@@ -1,0 +1,42 @@
+<h1 class="mb-4">📅 Календарь мероприятий</h1>
+
+<div class="mb-3">
+    <div class="btn-group" role="group">
+        <button class="btn btn-outline-primary" onclick="changeView('dayGridMonth')">Месяц</button>
+        <button class="btn btn-outline-primary" onclick="changeView('timeGridWeek')">Неделя</button>
+        <button class="btn btn-outline-primary" onclick="changeView('listWeek')">Список</button>
+    </div>
+</div>
+
+<div id="calendar"></div>
+
+<!-- ===== МОДАЛЬНОЕ ОКНО ДЛЯ МЕРОПРИЯТИЯ ===== -->
+<div class="modal fade" id="eventModal" tabindex="-1" aria-labelledby="eventModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="eventModalLabel">📌 Мероприятие</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+            </div>
+            <div class="modal-body" id="eventModalBody">
+                <div class="text-center py-3">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Загрузка...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" id="eventModalFooter">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function changeView(viewName) {
+        const calendar = document.getElementById('calendar');
+        if (calendar && calendar._calendar) {
+            calendar._calendar.changeView(viewName);
+        }
+    }
+</script>

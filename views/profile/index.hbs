@@ -1,0 +1,53 @@
+<h1 class="mb-4">👤 Мой профиль</h1>
+
+<div class="row">
+    <div class="col-md-4">
+        <div class="card shadow">
+            <div class="card-body text-center">
+                <div class="display-1 mb-3">👤</div>
+                <h4>{{user.full_name}}</h4>
+                <p class="text-muted">{{roleText user.role}}</p>
+                <p class="small">{{user.email}}</p>
+                <hr>
+                <div class="d-grid gap-2">
+                    <a href="/auth/logout" class="btn btn-outline-danger">🚪 Выйти</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-8">
+        <div class="card shadow">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">Информация</h5>
+            </div>
+            <div class="card-body">
+                {{#ifEquals user.role "student"}}
+                    <div class="alert alert-primary">
+                        <strong>Класс:</strong> 
+                        {{#if user.class_id}}
+                            ID: {{user.class_id}}
+                        {{else}}
+                            Не указан
+                        {{/if}}
+                    </div>
+                {{/ifEquals}}
+                
+                {{#ifEquals user.role "teacher"}}
+                    <div class="alert alert-primary">
+                        <strong>Кафедра:</strong> 
+                        {{#if user.department_id}}
+                            ID: {{user.department_id}}
+                        {{else}}
+                            Не указана
+                        {{/if}}
+                    </div>
+                {{/ifEquals}}
+                
+                <div class="alert alert-secondary">
+                    <p class="mb-0"><strong>Роль в системе:</strong> {{roleText user.role}}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

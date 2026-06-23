@@ -1,0 +1,83 @@
+<h1 class="mb-4">⚙️ Настройки системы</h1>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card shadow mb-3">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0">📚 Классы ({{classes.length}})</h5>
+            </div>
+            <div class="card-body">
+                <ul class="list-group">
+                    {{#each classes}}
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span><strong>{{name}}</strong> ({{grade_level}} класс)</span>
+                            <span class="badge bg-secondary">ID: {{id}}</span>
+                        </li>
+                    {{else}}
+                        <li class="list-group-item text-muted">Нет классов</li>
+                    {{/each}}
+                </ul>
+            </div>
+        </div>
+        
+        <div class="card shadow mb-3">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0">🏛️ Кафедры ({{departments.length}})</h5>
+            </div>
+            <div class="card-body">
+                <ul class="list-group">
+                    {{#each departments}}
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>{{name}}</span>
+                            <span class="badge bg-secondary">ID: {{id}}</span>
+                        </li>
+                    {{else}}
+                        <li class="list-group-item text-muted">Нет кафедр</li>
+                    {{/each}}
+                </ul>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card shadow mb-3">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0">📖 Предметы ({{subjects.length}})</h5>
+            </div>
+            <div class="card-body">
+                <ul class="list-group">
+                    {{#each subjects}}
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>{{name}}</span>
+                            <span class="badge bg-secondary">Кафедра: {{department_id}}</span>
+                        </li>
+                    {{else}}
+                        <li class="list-group-item text-muted">Нет предметов</li>
+                    {{/each}}
+                </ul>
+            </div>
+        </div>
+        
+        <div class="card shadow">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0">🏷️ Типы мероприятий ({{eventTypes.length}})</h5>
+            </div>
+            <div class="card-body">
+                <ul class="list-group">
+                    {{#each eventTypes}}
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>{{name}}</span>
+                            <span class="badge bg-secondary">ID: {{id}}</span>
+                        </li>
+                    {{else}}
+                        <li class="list-group-item text-muted">Нет типов мероприятий</li>
+                    {{/each}}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="mt-3 text-muted small">
+    <p>Данные загружены из базы данных. Для изменения используйте phpMyAdmin.</p>
+</div>

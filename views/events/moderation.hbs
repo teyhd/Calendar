@@ -1,0 +1,65 @@
+<h1 class="mb-4">🔍 Модерация мероприятий</h1>
+
+{{#if events.length}}
+    <div class="row">
+        {{#each events}}
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="card shadow h-100">
+                    <div class="card-header bg-warning">
+                        <span class="badge bg-warning text-dark">На модерации</span>
+                        <span class="badge bg-secondary float-end">{{type_name}}</span>
+                    </div>
+                    <div class="card-body">
+                        <h5 class="card-title">{{title}}</h5>
+                        <p class="card-text small">{{description}}</p>
+                        <div class="small text-muted">
+                            <div>📅 {{formatDate start_datetime}} - {{formatDate end_datetime}}</div>
+                            <div>👤 Создал: {{creator_name}}</div>
+                            <div>📍 {{location}}</div>
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <div class="btn-group w-100">
+                            <form action="/events/moderation/{{id}}" method="POST" class="w-100">
+                                <input type="hidden" name="action" value="approve">
+                                <button type="submit" class="btn btn-success w-50">✅ Утвердить</button>
+                            </form>
+                            <button type="button" class="btn btn-danger w-50" onclick="rejectEvent({{id}})">❌ Отклонить</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {{/each}}
+    </div>
+{{else}}
+    <div class="alert alert-success">
+        <h4>✅ Все мероприятия проверены!</h4>
+        <p>Нет мероприятий, ожидающих модерации.</p>
+    </div>
+{{/if}}
+
+<script>
+    function rejectEvent(eventId) {
+        const reason = prompt('Укажите причину отклонения:');
+        if (reason !== null) {
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = `/events/moderation/${eventId}`;
+            
+            const actionInput = document.createElement('input');
+            actionInput.type = 'hidden';
+            actionInput.name = 'action';
+            actionInput.value = 'reject';
+            
+            const reasonInput = document.createElement('input');
+            reasonInput.type = 'hidden';
+            reasonInput.name = 'rejection_reason';
+            reasonInput.value = reason || 'Без указания причины';
+            
+            form.appendChild(actionInput);
+            form.appendChild(reasonInput);
+            document.body.appendChild(form);
+            form.submit();
+        }
+    }
+</script>

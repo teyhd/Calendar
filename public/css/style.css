@@ -1,0 +1,57 @@
+/* Основные стили */
+body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+main {
+    flex: 1;
+}
+
+/* Стили для календаря */
+#calendar {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.fc-event {
+    cursor: pointer;
+}
+
+.fc-event-title {
+    font-weight: 500;
+}
+
+/* Карточки мероприятий */
+.event-card {
+    transition: transform 0.2s;
+}
+
+.event-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+}
+
+/* Статусы */
+.status-pending { background-color: #ffc107; }
+.status-approved { background-color: #28a745; }
+.status-rejected { background-color: #dc3545; }
+.status-canceled { background-color: #6c757d; }
+.status-completed { background-color: #17a2b8; }
+
+/* Адаптивность */
+@media (max-width: 768px) {
+    .fc-toolbar {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .fc-toolbar .fc-left,
+    .fc-toolbar .fc-center,
+    .fc-toolbar .fc-right {
+        float: none;
+        text-align: center;
+    }
+}

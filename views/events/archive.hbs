@@ -1,0 +1,23 @@
+<h1 class="mb-4">📦 Архив мероприятий</h1>
+
+<div class="mb-3">
+    <div class="btn-group" role="group">
+        <button class="btn btn-outline-secondary active" onclick="filterArchive('all')">Все</button>
+        <button class="btn btn-outline-secondary" onclick="filterArchive('completed')">Завершенные</button>
+        <button class="btn btn-outline-secondary" onclick="filterArchive('canceled')">Отмененные</button>
+    </div>
+</div>
+
+<div id="archive-list">
+    <div class="alert alert-info">
+        <p>Здесь будут отображаться завершенные и отмененные мероприятия.</p>
+        <p class="small text-muted">Пока нет данных в архиве.</p>
+    </div>
+</div>
+
+<script>
+    function filterArchive(status) {
+        // В будущем здесь будет AJAX-запрос для фильтрации
+        console.log('Фильтр архива:', status);
+    }
+</script>

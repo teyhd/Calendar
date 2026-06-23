@@ -1,0 +1,58 @@
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <div class="container">
+        <a class="navbar-brand" href="/">📅 Школьный календарь</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav ms-auto">
+                {{#if isAuthenticated}}
+                    <li class="nav-item"><a class="nav-link" href="/">Календарь</a></li>
+                    {{#if (eq user.role "teacher")}}
+                        <li class="nav-item"><a class="nav-link" href="/events/create">➕ Создать</a></li>
+                    {{/if}}
+                    {{#if (eq user.role "admin")}}
+                        <li class="nav-item"><a class="nav-link" href="/events/moderation">Модерация</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/admin/users">Пользователи</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/admin/settings">Настройки</a></li>
+                    {{/if}}
+                    
+                    <!-- Уведомления (иконка) -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="notificationsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            🔔
+                            {{#if unreadCount}}
+                                <span class="badge bg-danger">{{unreadCount}}</span>
+                            {{/if}}
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="notificationsDropdown" style="min-width: 300px;">
+                            {{#if notifications.length}}
+                                {{#each notifications}}
+                                    <li>
+                                        <a class="dropdown-item" href="#">
+                                            <small>{{this.message}}</small>
+                                            <br>
+                                            <span class="text-muted" style="font-size: 0.7rem;">{{formatDate this.created_at}}</span>
+                                            {{#unless this.is_read}}
+                                                <span class="badge bg-primary">Новое</span>
+                                            {{/unless}}
+                                        </a>
+                                    </li>
+                                {{/each}}
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item text-center" href="/notifications/all">Все уведомления</a></li>
+                            {{else}}
+                                <li><span class="dropdown-item text-muted">Нет уведомлений</span></li>
+                            {{/if}}
+                        </ul>
+                    </li>
+                    
+                    <li class="nav-item"><a class="nav-link" href="/profile">👤 {{user.full_name}}</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/auth/logout">Выйти</a></li>
+                {{else}}
+                    <li class="nav-item"><a class="nav-link" href="/auth/login">Войти</a></li>
+                {{/if}}
+            </ul>
+        </div>
+    </div>
+</nav>
