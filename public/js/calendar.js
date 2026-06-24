@@ -8,12 +8,29 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'dayGridMonth',
-        locale: 'ru',
+        locale: 'ru', // русская локализация (месяцы, дни недели)
         headerToolbar: {
             left: 'prev,next today',
             center: 'title',
             right: 'dayGridMonth,timeGridWeek,listWeek'
         },
+        // ---------- ПЕРЕВОД КНОПОК ----------
+        buttonText: {
+            today: 'Сегодня',
+            month: 'Месяц',
+            week: 'Неделя',
+            list: 'Список',
+            // Для навигации (если нужно) – обычно это иконки, но можно задать текст:
+            prev: '‹',
+            next: '›'
+        },
+        // Всплывающие подсказки для навигации (тоже на русском)
+        buttonHints: {
+            prev: 'Предыдущий',
+            next: 'Следующий',
+            today: 'Сегодня'
+        },
+        // ------------------------------------
         events: function(fetchInfo, successCallback, failureCallback) {
             fetch('/api/events')
                 .then(response => {
@@ -62,15 +79,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const userRole = window.currentUserRole;
             const isOwner = parseInt(props.created_by) === parseInt(userId);
             const isAdmin = userRole === 'admin';
-            // Редактирование доступно:
-            // - администратору всегда
-            // - создателю, если статус 'pending' (на модерации)
             const canEdit = isAdmin || (isOwner && props.status === 'pending');
     
-            // Заполняем модальное окно
             renderEventModal(event, props, canEdit, isAdmin, isOwner);
     
-            // Показываем модальное окно
             const modal = new bootstrap.Modal(document.getElementById('eventModal'));
             modal.show();
         },
@@ -100,7 +112,6 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner) {
     const modalFooter = document.getElementById('eventModalFooter');
     const modalTitle = document.getElementById('eventModalLabel');
     
-    // Статус с цветом
     const statusColors = {
         pending: 'warning',
         approved: 'success',
@@ -118,10 +129,8 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner) {
     const statusColor = statusColors[props.status] || 'secondary';
     const statusText = statusTexts[props.status] || props.status;
     
-    // Заголовок
     modalTitle.textContent = `📌 ${event.title}`;
     
-    // Тело модального окна
     modalBody.innerHTML = `
         <div class="row">
             <div class="col-md-8">
@@ -211,10 +220,8 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner) {
         </div>
     `;
     
-    // Футер модального окна (кнопки)
     let footerButtons = '';
     
-    // Кнопка редактирования (для создателя или админа)
     if (canEdit) {
         footerButtons += `
             <a href="/events/edit/${event.id}" class="btn btn-primary">
@@ -223,7 +230,6 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner) {
         `;
     }
     
-    // Кнопка записи (для учеников и родителей) - используем глобальную переменную
     const userRole = window.currentUserRole;
     if ((userRole === 'student' || userRole === 'parent') && props.status === 'approved') {
         footerButtons += `
@@ -233,7 +239,6 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner) {
         `;
     }
     
-    // Кнопка модерации (для админа, если статус pending)
     if (isAdmin && props.status === 'pending') {
         footerButtons += `
             <a href="/events/moderation" class="btn btn-warning">
@@ -265,10 +270,8 @@ function registerForEvent(eventId) {
     .then(data => {
         if (data.success) {
             alert('✅ ' + data.message);
-            // Закрываем модальное окно
             const modal = bootstrap.Modal.getInstance(document.getElementById('eventModal'));
             if (modal) modal.hide();
-            // Обновляем календарь
             if (window.calendar) {
                 window.calendar.refetchEvents();
             }

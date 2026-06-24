@@ -1,57 +1,663 @@
-/* Основные стили */
+/* ================================================================
+   style.css - Школьный календарь
+   Исправлена видимость событий в недельном и списковом режимах,
+   а также пустое модальное окно.
+   ================================================================ */
+
+/* -------------------- CSS-переменные --------------------------- */
+:root {
+    --primary-dark: #2C3E6B;
+    --secondary-light: #EFF3F8;
+    --accent-orange: #F39C12;
+    --accent-green: #27AE60;
+    --white: #FFFFFF;
+    --light-gray: #F8F9FA;
+    --dark-gray: #343A40;
+    --medium-gray: #6C757D;
+    --border-color: #dee2e6;
+    --shadow-sm: 0 .125rem .25rem rgba(0,0,0,.075);
+    --shadow-md: 0 .5rem 1rem rgba(0,0,0,.15);
+    --shadow-lg: 0 1rem 3rem rgba(0,0,0,.175);
+    --border-radius: .5rem;
+    --transition-base: all .25s ease-in-out;
+}
+
+/* -------------------- Общие стили ------------------------------ */
 body {
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background-color: var(--secondary-light);
+    color: var(--dark-gray);
 }
 
 main {
-    flex: 1;
+    animation: fadeIn 0.6s ease-out;
+}
+@keyframes fadeIn {
+    0% { opacity: 0; transform: translateY(10px); }
+    100% { opacity: 1; transform: translateY(0); }
 }
 
-/* Стили для календаря */
+h1 {
+    color: var(--primary-dark);
+    font-weight: 700;
+    text-shadow: 0 2px 4px rgba(44, 62, 107, 0.1);
+}
+
+.card {
+    border: none;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-sm);
+    transition: var(--transition-base);
+}
+.card:hover {
+    box-shadow: var(--shadow-md);
+}
+
+/* -------------------- Навбар (переопределение Bootstrap) -------- */
+.navbar.bg-primary {
+    background-color: var(--primary-dark) !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+.navbar-brand,
+.navbar .nav-link {
+    color: rgba(255,255,255,0.9) !important;
+    font-weight: 500;
+    transition: var(--transition-base);
+}
+.navbar .nav-link:hover,
+.navbar .nav-link:focus {
+    color: #ffffff !important;
+    background-color: rgba(255,255,255,0.1);
+    border-radius: var(--border-radius);
+}
+.navbar .nav-link.active {
+    color: #ffffff !important;
+    background-color: rgba(255,255,255,0.2);
+    border-radius: var(--border-radius);
+}
+.navbar .navbar-toggler {
+    border-color: rgba(255,255,255,0.3);
+}
+.navbar .navbar-toggler-icon {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba(255,255,255,0.8)' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+}
+
+.navbar .dropdown-menu {
+    border: none;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-md);
+    padding: 0.5rem 0;
+    animation: dropdownFade 0.3s ease-out;
+}
+@keyframes dropdownFade {
+    0% { opacity: 0; transform: translateY(-10px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+.navbar .dropdown-item {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+    transition: var(--transition-base);
+}
+.navbar .dropdown-item:last-child {
+    border-bottom: none;
+}
+.navbar .dropdown-item:hover,
+.navbar .dropdown-item:focus {
+    background-color: var(--secondary-light);
+}
+.navbar .dropdown-item .badge.bg-primary {
+    background-color: var(--primary-dark) !important;
+}
+.navbar .dropdown-divider {
+    margin: 0;
+}
+.navbar .dropdown-item.text-center {
+    color: var(--primary-dark);
+    font-weight: 600;
+}
+.navbar .dropdown-item.text-center:hover {
+    background-color: transparent;
+    color: var(--accent-orange);
+}
+.navbar-collapse.collapsing {
+    transition: height 0.3s ease;
+}
+
+/* -------------------- Кнопки переключения видов ----------------- */
+.btn-group .btn-outline-primary {
+    color: var(--primary-dark);
+    border-color: var(--primary-dark);
+    background-color: transparent;
+    transition: var(--transition-base);
+}
+.btn-group .btn-outline-primary:hover {
+    background-color: var(--primary-dark);
+    color: #fff;
+    box-shadow: var(--shadow-sm);
+}
+.btn-group .btn-outline-primary.active,
+.btn-group .btn-outline-primary:active {
+    background-color: var(--accent-orange) !important;
+    border-color: var(--accent-orange) !important;
+    color: #fff !important;
+    box-shadow: 0 0 0 0.2rem rgba(243, 156, 18, 0.3);
+}
+.btn-group .btn-outline-primary:focus {
+    box-shadow: 0 0 0 0.2rem rgba(44, 62, 107, 0.25);
+}
+
+/* -------------------- FullCalendar (переопределение) ------------ */
 #calendar {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 20px;
+    background: var(--white);
+    border-radius: var(--border-radius);
+    padding: 1rem;
+    box-shadow: var(--shadow-sm);
+    transition: var(--transition-base);
 }
 
-.fc-event {
+/* Хедер */
+.fc .fc-toolbar-title {
+    color: var(--primary-dark);
+    font-weight: 600;
+}
+.fc .fc-button {
+    background-color: var(--white);
+    border-color: var(--primary-dark);
+    color: var(--primary-dark);
+    border-radius: var(--border-radius);
+    transition: var(--transition-base);
+    box-shadow: var(--shadow-sm);
+}
+.fc .fc-button:hover {
+    background-color: var(--primary-dark);
+    color: #fff;
+    border-color: var(--primary-dark);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+.fc .fc-button-primary:not(:disabled):active,
+.fc .fc-button-primary:not(:disabled).fc-button-active {
+    background-color: var(--primary-dark);
+    border-color: var(--primary-dark);
+}
+.fc .fc-button-primary:focus {
+    box-shadow: 0 0 0 0.2rem rgba(44, 62, 107, 0.3);
+}
+.fc .fc-today-button {
+    background-color: var(--primary-dark) !important;
+    border-color: var(--primary-dark) !important;
+    color: #fff !important;
+}
+.fc .fc-today-button:hover {
+    background-color: #1e2f4f !important;
+    border-color: #1e2f4f !important;
+}
+
+/* Заголовки дней недели */
+.fc .fc-col-header-cell {
+    background-color: var(--secondary-light);
+    color: var(--primary-dark);
+    font-weight: 700;
+    padding: 0.5rem 0;
+}
+.fc .fc-col-header-cell-cushion {
+    padding: 0.5rem;
+}
+
+/* Ячейки дней */
+.fc .fc-daygrid-day {
+    background-color: var(--white);
+    border-color: var(--border-color);
+    transition: var(--transition-base);
+}
+.fc .fc-daygrid-day:hover {
+    background-color: rgba(44, 62, 107, 0.02);
+}
+.fc .fc-daygrid-day-number {
+    color: var(--dark-gray);
+    font-weight: 500;
+    padding: 0.5rem;
+}
+
+/* Сегодняшняя дата */
+.fc .fc-day-today {
+    background-color: rgba(243, 156, 18, 0.08) !important;
+}
+.fc .fc-day-today .fc-daygrid-day-number {
+    background-color: var(--accent-orange);
+    color: #fff;
+    border-radius: 50%;
+    width: 2.2rem;
+    height: 2.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0.2rem auto;
+    font-weight: 700;
+}
+
+/* -------------------- Стили для событий ВО ВСЕХ РЕЖИМАХ ------- */
+/* Базовый стиль (для month и остальных) */
+.fc .fc-event {
+    border: none;
+    border-radius: 0.3rem;
+    background-color: var(--white);
+    color: var(--dark-gray) !important;
+    padding: 0.2rem 0.4rem;
+    margin: 0.1rem 0.2rem;
+    box-shadow: var(--shadow-sm);
+    transition: var(--transition-base);
     cursor: pointer;
+    font-size: 0.85rem;
+    /* УБРАЛИ border-left – теперь задаётся через JS */
+}
+.fc .fc-event:hover {
+    transform: scale(1.02);
+    box-shadow: var(--shadow-md);
+    z-index: 2;
 }
 
-.fc-event-title {
+/* Цветные полосы для статусов (дополнительно) */
+.fc .fc-event[style*="border-left: 4px solid #28a745"] {
+    border-left-color: #28a745 !important;
+}
+.fc .fc-event[style*="border-left: 4px solid #ffc107"] {
+    border-left-color: #ffc107 !important;
+}
+.fc .fc-event[style*="border-left: 4px solid #dc3545"] {
+    border-left-color: #dc3545 !important;
+}
+.fc .fc-event[style*="border-left: 4px solid #17a2b8"] {
+    border-left-color: #17a2b8 !important;
+}
+.fc .fc-event[style*="border-left: 4px solid #6c757d"] {
+    border-left-color: #6c757d !important;
+}
+
+/* ---------- ИСПРАВЛЕНИЕ ДЛЯ НЕДЕЛЬНОГО РЕЖИМА (timeGrid) -------- */
+.fc-timegrid-event {
+    background-color: var(--white) !important;
+    border: 1px solid var(--border-color); /* убрали !important */
+    border-radius: 0.3rem !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+.fc-timegrid-event .fc-event-main {
+    color: var(--dark-gray) !important;
+    background-color: transparent !important;
+    padding: 0.2rem 0.4rem;
+}
+.fc-timegrid-event .fc-event-title,
+.fc-timegrid-event .fc-event-time {
+    color: var(--dark-gray) !important;
     font-weight: 500;
 }
-
-/* Карточки мероприятий */
-.event-card {
-    transition: transform 0.2s;
+.fc-timegrid-event .fc-event-time {
+    font-weight: 600;
+    color: var(--primary-dark) !important;
+}
+.fc-timegrid-event:hover {
+    transform: scale(1.02);
+    box-shadow: var(--shadow-md);
 }
 
-.event-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+/* ---------- ИСПРАВЛЕНИЕ ДЛЯ СПИСКА (listWeek, listMonth) -------- */
+.fc-list-event {
+    background-color: var(--white) !important;
+    color: var(--dark-gray) !important;
+    /* border-left убран – задаётся через JS */
+    border-radius: 0.3rem !important;
+    margin-bottom: 0.25rem !important;
+    box-shadow: var(--shadow-sm) !important;
+    transition: var(--transition-base);
 }
+.fc-list-event .fc-list-event-title,
+.fc-list-event .fc-list-event-time {
+    color: var(--dark-gray) !important;
+}
+.fc-list-event:hover {
+    background-color: var(--secondary-light) !important;
+    transform: translateX(4px);
+    box-shadow: var(--shadow-md);
+}
+/* Цветные полосы для списка (переопределяем по статусу через JS, но добавим запас) */
+.fc-list-event[style*="border-left-color: #28a745"] { border-left-color: #28a745 !important; }
+.fc-list-event[style*="border-left-color: #ffc107"] { border-left-color: #ffc107 !important; }
+.fc-list-event[style*="border-left-color: #dc3545"] { border-left-color: #dc3545 !important; }
+.fc-list-event[style*="border-left-color: #17a2b8"] { border-left-color: #17a2b8 !important; }
+.fc-list-event[style*="border-left-color: #6c757d"] { border-left-color: #6c757d !important; }
 
-/* Статусы */
-.status-pending { background-color: #ffc107; }
-.status-approved { background-color: #28a745; }
-.status-rejected { background-color: #dc3545; }
-.status-canceled { background-color: #6c757d; }
-.status-completed { background-color: #17a2b8; }
-
-/* Адаптивность */
-@media (max-width: 768px) {
-    .fc-toolbar {
-        flex-direction: column;
-        gap: 10px;
+/* -------------------- Мобильная адаптация календаря ------------ */
+@media (max-width: 767.98px) {
+    #calendar {
+        padding: 0.5rem;
     }
-    
-    .fc-toolbar .fc-left,
-    .fc-toolbar .fc-center,
-    .fc-toolbar .fc-right {
-        float: none;
-        text-align: center;
+    .fc .fc-toolbar {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        justify-content: center;
+    }
+    .fc .fc-toolbar-title {
+        font-size: 1.2rem;
+    }
+    .fc .fc-button {
+        font-size: 0.8rem;
+        padding: 0.25rem 0.5rem;
+    }
+    .fc .fc-daygrid-day-number {
+        font-size: 0.8rem;
+        padding: 0.2rem;
+    }
+    .fc .fc-event {
+        font-size: 0.7rem;
+        padding: 0.1rem 0.3rem;
+    }
+    .fc .fc-day-today .fc-daygrid-day-number {
+        width: 1.8rem;
+        height: 1.8rem;
+        font-size: 0.9rem;
+    }
+    .fc .fc-col-header-cell-cushion {
+        font-size: 0.8rem;
+        padding: 0.2rem;
+    }
+    /* Для timeGrid на мобильных */
+    .fc-timegrid-event .fc-event-main {
+        font-size: 0.7rem;
+        padding: 0.1rem 0.2rem;
+    }
+    .fc-list-event {
+        font-size: 0.8rem;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .fc .fc-daygrid-day-number {
+        font-size: 0.7rem;
+        padding: 0.1rem;
+    }
+    .fc .fc-event {
+        font-size: 0.6rem;
+        padding: 0.05rem 0.2rem;
+        border-left-width: 3px;
+    }
+    .fc .fc-toolbar-title {
+        font-size: 1rem;
+    }
+    .fc .fc-button {
+        font-size: 0.7rem;
+        padding: 0.15rem 0.4rem;
+    }
+    .fc-timegrid-event .fc-event-main {
+        font-size: 0.6rem;
+    }
+    .fc-list-event {
+        font-size: 0.7rem;
+    }
+}
+
+/* -------------------- Модальное окно (исправление пустоты) ----- */
+.modal-content {
+    border: none;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-lg);
+    animation: modalFadeIn 0.3s ease-out;
+}
+@keyframes modalFadeIn {
+    0% { opacity: 0; transform: scale(0.95); }
+    100% { opacity: 1; transform: scale(1); }
+}
+.modal-header {
+    border-bottom: 1px solid var(--border-color);
+    background-color: var(--secondary-light);
+    border-radius: var(--border-radius) var(--border-radius) 0 0;
+    padding: 1rem 1.5rem;
+}
+.modal-title {
+    color: var(--primary-dark);
+    font-weight: 700;
+}
+.modal-body {
+    padding: 1.5rem;
+    color: var(--dark-gray); /* гарантия читаемости */
+}
+.modal-footer {
+    border-top: 1px solid var(--border-color);
+    padding: 1rem 1.5rem;
+    background-color: var(--secondary-light);
+    border-radius: 0 0 var(--border-radius) var(--border-radius);
+}
+.modal .btn-close {
+    transition: var(--transition-base);
+}
+.modal .btn-close:hover {
+    transform: rotate(90deg);
+}
+
+/* Карточка статуса внутри модалки */
+.modal .card.bg-light {
+    background-color: var(--secondary-light) !important;
+    border: none;
+    border-radius: var(--border-radius);
+}
+.modal .alert {
+    border-radius: var(--border-radius);
+    border: none;
+}
+
+/* Кнопки в модалке */
+.modal .btn {
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-sm);
+    transition: var(--transition-base);
+}
+.modal .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+.modal .btn:active {
+    transform: translateY(0);
+}
+.modal .btn-primary {
+    background-color: var(--primary-dark);
+    border-color: var(--primary-dark);
+}
+.modal .btn-primary:hover {
+    background-color: #1e2f4f;
+    border-color: #1e2f4f;
+}
+.modal .btn-success {
+    background-color: var(--accent-green);
+    border-color: var(--accent-green);
+}
+.modal .btn-success:hover {
+    background-color: #1e8449;
+    border-color: #1e8449;
+}
+.modal .btn-warning {
+    background-color: var(--accent-orange);
+    border-color: var(--accent-orange);
+    color: #fff;
+}
+.modal .btn-warning:hover {
+    background-color: #d68910;
+    border-color: #d68910;
+    color: #fff;
+}
+.modal .btn-secondary {
+    background-color: var(--medium-gray);
+    border-color: var(--medium-gray);
+}
+.modal .btn-secondary:hover {
+    background-color: #5a6268;
+    border-color: #5a6268;
+}
+
+/* -------------------- Бейджи статусов ------------------------- */
+.badge {
+    border-radius: 2rem;
+    padding: 0.4rem 0.8rem;
+    font-weight: 600;
+    box-shadow: var(--shadow-sm);
+}
+.badge.bg-success {
+    background-color: var(--accent-green) !important;
+}
+.badge.bg-warning {
+    background-color: var(--accent-orange) !important;
+    color: #fff;
+}
+.badge.bg-danger {
+    background-color: #e74c3c !important;
+}
+.badge.bg-secondary {
+    background-color: #95a5a6 !important;
+}
+.badge.bg-info {
+    background-color: #5bc0de !important;
+}
+
+/* -------------------- Кнопки действий ------------------------- */
+.btn {
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-sm);
+    transition: var(--transition-base);
+    font-weight: 500;
+}
+.btn:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-md);
+}
+.btn:active {
+    transform: translateY(0);
+}
+.btn-primary {
+    background-color: var(--primary-dark);
+    border-color: var(--primary-dark);
+}
+.btn-primary:hover {
+    background-color: #1e2f4f;
+    border-color: #1e2f4f;
+}
+.btn-success {
+    background-color: var(--accent-green);
+    border-color: var(--accent-green);
+}
+.btn-success:hover {
+    background-color: #1e8449;
+    border-color: #1e8449;
+}
+.btn-warning {
+    background-color: var(--accent-orange);
+    border-color: var(--accent-orange);
+    color: #fff;
+}
+.btn-warning:hover {
+    background-color: #d68910;
+    border-color: #d68910;
+    color: #fff;
+}
+
+/* Кнопки FullCalendar (переопределение) */
+.fc .fc-button-primary {
+    background-color: var(--primary-dark);
+    border-color: var(--primary-dark);
+    color: #fff;
+}
+.fc .fc-button-primary:hover {
+    background-color: #1e2f4f;
+    border-color: #1e2f4f;
+}
+.fc .fc-button-primary:disabled {
+    background-color: var(--medium-gray);
+    border-color: var(--medium-gray);
+}
+
+/* -------------------- Спиннер загрузки ------------------------- */
+.spinner-border {
+    color: var(--primary-dark) !important;
+}
+
+/* -------------------- Формы ----------------------------------- */
+.form-control,
+.form-select {
+    border-radius: var(--border-radius);
+    border: 1px solid var(--border-color);
+    transition: var(--transition-base);
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+}
+.form-control:focus,
+.form-select:focus {
+    border-color: var(--primary-dark);
+    box-shadow: 0 0 0 0.2rem rgba(44, 62, 107, 0.25);
+}
+.form-label {
+    font-weight: 600;
+    color: var(--dark-gray);
+}
+
+/* -------------------- Футер (если есть) ----------------------- */
+footer {
+    background-color: var(--primary-dark);
+    color: rgba(255,255,255,0.8);
+    padding: 1.5rem 0;
+    margin-top: 2rem;
+}
+footer a {
+    color: rgba(255,255,255,0.6);
+    transition: var(--transition-base);
+}
+footer a:hover {
+    color: #fff;
+    text-decoration: none;
+}
+
+/* -------------------- Утилиты -------------------------------- */
+.text-primary-dark {
+    color: var(--primary-dark);
+}
+.bg-secondary-light {
+    background-color: var(--secondary-light);
+}
+.shadow-sm-custom {
+    box-shadow: var(--shadow-sm);
+}
+.transition-base {
+    transition: var(--transition-base);
+}
+
+@media (max-width: 767.98px) {
+    .btn {
+        font-size: 0.9rem;
+        padding: 0.4rem 0.8rem;
+    }
+    .modal-dialog {
+        margin: 0.5rem;
+    }
+    .modal-body {
+        padding: 1rem;
+    }
+    .navbar-brand {
+        font-size: 1.1rem;
+    }
+    .navbar .nav-link {
+        font-size: 0.95rem;
+        padding: 0.5rem 0.75rem;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .btn {
+        font-size: 0.8rem;
+        padding: 0.3rem 0.6rem;
+    }
+    .modal-title {
+        font-size: 1.1rem;
+    }
+    .badge {
+        font-size: 0.7rem;
+        padding: 0.3rem 0.6rem;
+    }
+    h1 {
+        font-size: 1.6rem;
     }
 }
