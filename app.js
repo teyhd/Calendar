@@ -462,6 +462,28 @@ app.post('/events/edit/:id', isTeacher, async (req, res) => {
     }
 });
 
+// ----- Мои мероприятия (для учителей и админов) -----
+app.get('/my-events', isTeacher, async (req, res) => {
+    try {
+        const [events] = await pool.query(
+            `SELECT e.*, u.full_name as creator_name, et.name as type_name
+             FROM events e
+             LEFT JOIN users u ON e.created_by = u.id
+             LEFT JOIN event_types et ON e.event_type_id = et.id
+             WHERE e.created_by = ?
+             ORDER BY e.created_at DESC`,
+            [req.session.user.id]
+        );
+        res.render('events/my-events', {
+            title: 'Мои мероприятия',
+            events
+        });
+    } catch (error) {
+        mlog('[ERROR]', 'Ошибка загрузки моих мероприятий', error);
+        res.status(500).send('Ошибка сервера');
+    }
+});
+
 // ----- Модерация -----
 app.get('/events/moderation', isAdmin, async (req, res) => {
     try {
@@ -563,39 +585,43 @@ app.get('/api/events', isAuthenticated, async (req, res) => {
             FROM events e
             LEFT JOIN users u ON e.created_by = u.id
             LEFT JOIN event_types et ON e.event_type_id = et.id
-            WHERE (e.status = 'approved' 
-                   OR (e.status = 'pending' AND e.created_by = ?))
+            WHERE 
+                -- Всегда показываем свои мероприятия (любого статуса)
+                e.created_by = ?
+                OR 
+                -- Или утверждённые мероприятия (для всех)
+                (e.status = 'approved'
+                ${user.role === 'student' ? `AND (e.target_audience_type = 'all' 
+                    OR (e.target_audience_type = 'class' AND e.target_audience_id = ?)
+                    OR (e.target_audience_type = 'parallel' AND e.target_audience_id = (SELECT grade_level FROM classes WHERE id = ?))
+                    OR (e.target_audience_type = 'specific_users' AND e.target_audience_id = ?))` : ''}
+                ${user.role === 'parent' ? `AND (e.target_audience_type = 'all'
+                    OR e.target_audience_id IN (SELECT student_id FROM parent_student WHERE parent_id = ?)
+                    OR (e.target_audience_type = 'specific_users' AND e.target_audience_id IN (SELECT student_id FROM parent_student WHERE parent_id = ?)))` : ''}
+                ${user.role === 'teacher' ? `AND (e.target_audience_type = 'all'
+                    OR (e.target_audience_type = 'department' AND e.target_audience_id = ?)
+                    OR (e.target_audience_type = 'specific_users' AND e.target_audience_id = ?))` : ''}
+                )
         `;
-        const params = [user.id];
+        const params = [user.id]; // для e.created_by = ?
 
-        // Дополнительные фильтры по ролям
+        // Добавляем параметры для фильтров в зависимости от роли
         if (user.role === 'student' && user.class_id) {
-            query += ` AND (
-                e.target_audience_type = 'all' 
-                OR (e.target_audience_type = 'class' AND e.target_audience_id = ?)
-                OR (e.target_audience_type = 'parallel' AND e.target_audience_id = (SELECT grade_level FROM classes WHERE id = ?))
-                OR (e.target_audience_type = 'specific_users' AND e.target_audience_id = ?)
-            )`;
             params.push(user.class_id, user.class_id, user.id);
         } else if (user.role === 'parent') {
-            query += ` AND (
-                e.target_audience_type = 'all'
-                OR e.target_audience_id IN (SELECT student_id FROM parent_student WHERE parent_id = ?)
-                OR (e.target_audience_type = 'specific_users' AND e.target_audience_id IN (SELECT student_id FROM parent_student WHERE parent_id = ?))
-            )`;
             params.push(user.id, user.id);
         } else if (user.role === 'teacher' && user.department_id) {
-            query += ` AND (
-                e.target_audience_type = 'all'
-                OR (e.target_audience_type = 'department' AND e.target_audience_id = ?)
-                OR (e.target_audience_type = 'specific_users' AND e.target_audience_id = ?)
-            )`;
             params.push(user.department_id, user.id);
         }
 
+        // Скрываем мероприятия администратора от учеников и родителей
         if (['student', 'parent'].includes(user.role)) {
             query += ' AND e.is_admin_event = 0';
         }
+
+        // Если пользователь не создатель, показываем только approved (но мы уже учли это через OR)
+        // Дополнительно: исключаем rejected и canceled из общего списка
+        query += ' AND e.status IN ("approved", "pending")';
 
         query += ' ORDER BY e.start_datetime';
 

@@ -58,16 +58,18 @@ document.addEventListener('DOMContentLoaded', function() {
         eventClick: function(info) {
             const event = info.event;
             const props = event.extendedProps;
-            // Берем данные из глобальных переменных
             const userId = window.currentUserId;
             const userRole = window.currentUserRole;
             const isOwner = parseInt(props.created_by) === parseInt(userId);
-            const canEdit = (userRole === 'admin' || userRole === 'teacher') && isOwner;
             const isAdmin = userRole === 'admin';
-            
+            // Редактирование доступно:
+            // - администратору всегда
+            // - создателю, если статус 'pending' (на модерации)
+            const canEdit = isAdmin || (isOwner && props.status === 'pending');
+    
             // Заполняем модальное окно
             renderEventModal(event, props, canEdit, isAdmin, isOwner);
-            
+    
             // Показываем модальное окно
             const modal = new bootstrap.Modal(document.getElementById('eventModal'));
             modal.show();
@@ -213,7 +215,7 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner) {
     let footerButtons = '';
     
     // Кнопка редактирования (для создателя или админа)
-    if (canEdit || isAdmin) {
+    if (canEdit) {
         footerButtons += `
             <a href="/events/edit/${event.id}" class="btn btn-primary">
                 ✏️ Редактировать

@@ -1,0 +1,40 @@
+<h1 class="mb-4">📋 Мои мероприятия</h1>
+
+{{#if events.length}}
+    <div class="row">
+        {{#each events}}
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="card shadow h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span class="badge" style="background-color: {{statusColor status}}; color: #fff;">
+                            {{statusText status}}
+                        </span>
+                        <span class="badge bg-secondary">{{type_name}}</span>
+                    </div>
+                    <div class="card-body">
+                        <h5 class="card-title">{{title}}</h5>
+                        <p class="card-text small">{{description}}</p>
+                        <div class="small text-muted">
+                            <div>📅 {{formatDate start_datetime}}</div>
+                            <div>📍 {{location}}</div>
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <div class="btn-group w-100">
+                            {{#if (eq status "pending")}}
+                                <a href="/events/edit/{{id}}" class="btn btn-primary btn-sm">✏️ Редактировать</a>
+                            {{else}}
+                                <a href="#" class="btn btn-outline-secondary btn-sm" onclick="alert('Мероприятие уже опубликовано, редактирование недоступно')">📖 Просмотр</a>
+                            {{/if}}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {{/each}}
+    </div>
+{{else}}
+    <div class="alert alert-info">
+        <p>У вас пока нет созданных мероприятий.</p>
+        <a href="/events/create" class="btn btn-primary">➕ Создать мероприятие</a>
+    </div>
+{{/if}}
