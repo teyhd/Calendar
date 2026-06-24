@@ -8,18 +8,20 @@
             <ul class="navbar-nav ms-auto">
                 {{#if isAuthenticated}}
                     <li class="nav-item"><a class="nav-link" href="/">Календарь</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/events/archive">📦 Архив</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/my-events">📋 Мои мероприятия</a></li>
                     
                     {{#if (eq user.role "teacher")}}
-                        <li class="nav-item"><a class="nav-link" href="/my-events">📋 Мои мероприятия</a></li>
                         <li class="nav-item"><a class="nav-link" href="/events/create">➕ Создать</a></li>
                     {{/if}}
+                    
                     {{#if (eq user.role "admin")}}
                         <li class="nav-item"><a class="nav-link" href="/events/moderation">Модерация</a></li>
                         <li class="nav-item"><a class="nav-link" href="/admin/users">Пользователи</a></li>
                         <li class="nav-item"><a class="nav-link" href="/admin/settings">Настройки</a></li>
                     {{/if}}
                     
-                    <!-- Уведомления (иконка) -->
+                    <!-- Уведомления -->
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="notificationsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             🔔

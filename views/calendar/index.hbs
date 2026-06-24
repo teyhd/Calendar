@@ -1,10 +1,114 @@
-<h1 class="mb-4">📅 Календарь мероприятий</h1>
+<div class="dashboard-header">
+    <div class="row align-items-center">
+        <div class="col-md-6">
+            <h1 class="mb-0">📅 Календарь мероприятий</h1>
+            <p class="text-muted">Планируйте и отслеживайте все школьные события</p>
+        </div>
+        <div class="col-md-6 text-md-end">
+            {{#if (eq user.role "teacher")}}
+                <a href="/events/create" class="btn btn-primary btn-lg">
+                    <i class="bi bi-plus-circle"></i> Создать мероприятие
+                </a>
+            {{/if}}
+            {{#if (eq user.role "admin")}}
+                <a href="/events/moderation" class="btn btn-warning btn-lg me-2">
+                    <i class="bi bi-clock-history"></i> Модерация
+                </a>
+            {{/if}}
+        </div>
+    </div>
+</div>
 
+<!-- Виджеты статистики -->
+<div class="row g-4 mb-4">
+    <div class="col-md-3 col-sm-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-primary">
+                <i class="bi bi-calendar-event"></i>
+            </div>
+            <div class="stat-info">
+                <span class="stat-label">Всего мероприятий</span>
+                <span class="stat-number" id="totalEvents">0</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-success">
+                <i class="bi bi-check-circle"></i>
+            </div>
+            <div class="stat-info">
+                <span class="stat-label">Опубликовано</span>
+                <span class="stat-number" id="approvedEvents">0</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-warning">
+                <i class="bi bi-hourglass-split"></i>
+            </div>
+            <div class="stat-info">
+                <span class="stat-label">На модерации</span>
+                <span class="stat-number" id="pendingEvents">0</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-info">
+                <i class="bi bi-person-check"></i>
+            </div>
+            <div class="stat-info">
+                <span class="stat-label">Моих участий</span>
+                <span class="stat-number" id="myParticipations">0</span>
+            </div>
+        </div>
+    </div>
+</div>
 
-<div id="calendar"></div>
+<!-- Панель фильтров -->
+<div class="filter-panel card shadow-sm mb-4">
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control" id="searchInput" placeholder="Поиск по названию...">
+                </div>
+            </div>
+            <div class="col-md-3">
+                <select class="form-select" id="filterStatus">
+                    <option value="all">Все статусы</option>
+                    <option value="approved">Опубликованные</option>
+                    <option value="pending">На модерации</option>
+                    <option value="completed">Завершённые</option>
+                    <option value="canceled">Отменённые</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select class="form-select" id="filterType">
+                    <option value="all">Все типы</option>
+                    {{#each types}}
+                        <option value="{{id}}">{{name}}</option>
+                    {{/each}}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-outline-secondary w-100" id="resetFiltersBtn">
+                    <i class="bi bi-arrow-counterclockwise"></i> Сбросить
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
-<!-- ===== МОДАЛЬНОЕ ОКНО ДЛЯ МЕРОПРИЯТИЯ ===== -->
-<div class="modal fade" id="eventModal" tabindex="-1" aria-labelledby="eventModalLabel" aria-hidden="true">
+<!-- Календарь -->
+<div id="calendar" class="shadow-sm rounded-3 p-3 bg-white"></div>
+
+<!-- Модальное окно для просмотра мероприятия (оставляем как есть) -->
+<div class="modal fade" id="eventModal" tabindex="-1" aria-hidden="true">
+    <!-- ... (оставляем без изменений) ... -->
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">

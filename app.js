@@ -332,7 +332,8 @@ app.post('/events/create', isTeacher, async (req, res) => {
     const {
         title, description, event_type_id, department_id, subject_id,
         start_datetime, end_datetime, location, level,
-        target_audience_type, target_audience_id, is_admin_event
+        target_audience_type, target_audience_id, is_admin_event,
+        is_registration_enabled 
     } = req.body;
 
     try {
@@ -340,13 +341,14 @@ app.post('/events/create', isTeacher, async (req, res) => {
             `INSERT INTO events (
                 title, description, event_type_id, department_id, subject_id,
                 start_datetime, end_datetime, location, level, status,
-                target_audience_type, target_audience_id, is_admin_event, created_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`,
+                target_audience_type, target_audience_id, is_admin_event, is_registration_enabled, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`,
             [
                 title, description, event_type_id, department_id || null, subject_id || null,
                 start_datetime, end_datetime, location, level || 'school',
                 target_audience_type, target_audience_id || null,
                 is_admin_event ? 1 : 0,
+                is_registration_enabled ? 1 : 0,
                 req.session.user.id
             ]
         );
@@ -462,21 +464,67 @@ app.post('/events/edit/:id', isTeacher, async (req, res) => {
     }
 });
 
-// ----- Мои мероприятия (для учителей и админов) -----
-app.get('/my-events', isTeacher, async (req, res) => {
+
+// ----- Мои мероприятия (для всех ролей) -----
+app.get('/my-events', isAuthenticated, async (req, res) => {
     try {
-        const [events] = await pool.query(
-            `SELECT e.*, u.full_name as creator_name, et.name as type_name
-             FROM events e
-             LEFT JOIN users u ON e.created_by = u.id
-             LEFT JOIN event_types et ON e.event_type_id = et.id
-             WHERE e.created_by = ?
-             ORDER BY e.created_at DESC`,
-            [req.session.user.id]
-        );
+        const userId = req.session.user.id;
+        const userRole = req.session.user.role;
+        let events = [];
+        let title = 'Мои мероприятия';
+
+        if (userRole === 'student') {
+            // Ученик видит мероприятия, на которые он записан
+            [events] = await pool.query(`
+                SELECT e.*, u.full_name as creator_name, et.name as type_name,
+                       e.is_registration_enabled,
+                       CASE 
+                           WHEN e.end_datetime < NOW() THEN 'Завершено'
+                           ELSE 'Записан'
+                       END as participation_status
+                FROM events e
+                LEFT JOIN users u ON e.created_by = u.id
+                LEFT JOIN event_types et ON e.event_type_id = et.id
+                INNER JOIN event_participants ep ON e.id = ep.event_id
+                WHERE ep.user_id = ?
+                ORDER BY e.start_datetime DESC
+            `, [userId]);
+            title = 'Мои мероприятия';
+
+        } else if (userRole === 'parent') {
+            // Родитель видит мероприятия своих детей
+            [events] = await pool.query(`
+                SELECT e.*, u.full_name as creator_name, et.name as type_name,
+                       e.is_registration_enabled,
+                       s.full_name as student_name
+                FROM events e
+                LEFT JOIN users u ON e.created_by = u.id
+                LEFT JOIN event_types et ON e.event_type_id = et.id
+                INNER JOIN event_participants ep ON e.id = ep.event_id
+                INNER JOIN users s ON ep.user_id = s.id
+                WHERE ep.user_id IN (SELECT student_id FROM parent_student WHERE parent_id = ?)
+                ORDER BY e.start_datetime DESC
+            `, [userId]);
+            title = 'Мероприятия моих детей';
+
+        } else if (userRole === 'teacher' || userRole === 'admin') {
+            // Учитель/админ видит созданные им мероприятия (без подсчёта участников)
+            [events] = await pool.query(`
+                SELECT e.*, u.full_name as creator_name, et.name as type_name,
+                       e.is_registration_enabled
+                FROM events e
+                LEFT JOIN users u ON e.created_by = u.id
+                LEFT JOIN event_types et ON e.event_type_id = et.id
+                WHERE e.created_by = ?
+                ORDER BY e.created_at DESC
+            `, [userId]);
+            title = userRole === 'admin' ? 'Мои мероприятия (как администратор)' : 'Мои мероприятия (как организатор)';
+        }
+
         res.render('events/my-events', {
-            title: 'Мои мероприятия',
-            events
+            title: title,
+            events: events,
+            userRole: userRole
         });
     } catch (error) {
         mlog('[ERROR]', 'Ошибка загрузки моих мероприятий', error);
@@ -552,20 +600,74 @@ app.post('/events/moderation/:id', isAdmin, async (req, res) => {
     }
 });
 
-// ----- Архив -----
+// ----- Архив мероприятий -----
 app.get('/events/archive', isAuthenticated, async (req, res) => {
     try {
-        const [events] = await pool.query(`
-            SELECT e.*, u.full_name as creator_name, et.name as type_name
-            FROM events e
-            LEFT JOIN users u ON e.created_by = u.id
-            LEFT JOIN event_types et ON e.event_type_id = et.id
-            WHERE e.status IN ('completed', 'canceled')
-            ORDER BY e.end_datetime DESC
-        `);
+        const userId = req.session.user.id;
+        const userRole = req.session.user.role;
+        let events = [];
+
+        if (userRole === 'student') {
+            [events] = await pool.query(`
+                SELECT e.*, u.full_name as creator_name, et.name as type_name,
+                       e.is_registration_enabled,
+                       CASE 
+                           WHEN e.status = 'completed' THEN 'Участвовал'
+                           WHEN e.status = 'canceled' THEN 'Отменено'
+                       END as participation_status
+                FROM events e
+                LEFT JOIN users u ON e.created_by = u.id
+                LEFT JOIN event_types et ON e.event_type_id = et.id
+                INNER JOIN event_participants ep ON e.id = ep.event_id
+                WHERE ep.user_id = ?
+                  AND e.end_datetime < NOW()
+                  AND e.status IN ('completed', 'canceled')
+                ORDER BY e.end_datetime DESC
+            `, [userId]);
+
+        } else if (userRole === 'parent') {
+            [events] = await pool.query(`
+                SELECT e.*, u.full_name as creator_name, et.name as type_name,
+                       e.is_registration_enabled,
+                       s.full_name as student_name,
+                       CASE 
+                           WHEN e.status = 'completed' THEN 'Участвовал'
+                           WHEN e.status = 'canceled' THEN 'Отменено'
+                       END as participation_status
+                FROM events e
+                LEFT JOIN users u ON e.created_by = u.id
+                LEFT JOIN event_types et ON e.event_type_id = et.id
+                INNER JOIN event_participants ep ON e.id = ep.event_id
+                INNER JOIN users s ON ep.user_id = s.id
+                WHERE ep.user_id IN (SELECT student_id FROM parent_student WHERE parent_id = ?)
+                  AND e.end_datetime < NOW()
+                  AND e.status IN ('completed', 'canceled')
+                ORDER BY e.end_datetime DESC
+            `, [userId]);
+
+        } else if (userRole === 'teacher' || userRole === 'admin') {
+            [events] = await pool.query(`
+                SELECT e.*, u.full_name as creator_name, et.name as type_name,
+                       e.is_registration_enabled,
+                       (SELECT COUNT(*) FROM event_participants WHERE event_id = e.id) as participants_count,
+                       CASE 
+                           WHEN e.status = 'completed' THEN 'Завершено'
+                           WHEN e.status = 'canceled' THEN 'Отменено'
+                       END as participation_status
+                FROM events e
+                LEFT JOIN users u ON e.created_by = u.id
+                LEFT JOIN event_types et ON e.event_type_id = et.id
+                WHERE e.created_by = ?
+                  AND e.end_datetime < NOW()
+                  AND e.status IN ('completed', 'canceled')
+                ORDER BY e.end_datetime DESC
+            `, [userId]);
+        }
+
         res.render('events/archive', {
             title: 'Архив мероприятий',
-            events
+            events: events,
+            userRole: userRole
         });
     } catch (error) {
         mlog('[ERROR]', 'Ошибка загрузки архива', error);
@@ -580,52 +682,105 @@ app.get('/events/archive', isAuthenticated, async (req, res) => {
 app.get('/api/events', isAuthenticated, async (req, res) => {
     try {
         const user = req.session.user;
-        let query = `
-            SELECT e.*, u.full_name as creator_name, et.name as type_name
+        const search = req.query.search || '';
+        const status = req.query.status || 'all';
+        const type = req.query.type || 'all';
+
+        let sql = `
+            SELECT e.*, u.full_name as creator_name, et.name as type_name,
+                   e.is_registration_enabled
             FROM events e
             LEFT JOIN users u ON e.created_by = u.id
             LEFT JOIN event_types et ON e.event_type_id = et.id
-            WHERE 
-                -- Всегда показываем свои мероприятия (любого статуса)
-                e.created_by = ?
-                OR 
-                -- Или утверждённые мероприятия (для всех)
-                (e.status = 'approved'
-                ${user.role === 'student' ? `AND (e.target_audience_type = 'all' 
-                    OR (e.target_audience_type = 'class' AND e.target_audience_id = ?)
-                    OR (e.target_audience_type = 'parallel' AND e.target_audience_id = (SELECT grade_level FROM classes WHERE id = ?))
-                    OR (e.target_audience_type = 'specific_users' AND e.target_audience_id = ?))` : ''}
-                ${user.role === 'parent' ? `AND (e.target_audience_type = 'all'
-                    OR e.target_audience_id IN (SELECT student_id FROM parent_student WHERE parent_id = ?)
-                    OR (e.target_audience_type = 'specific_users' AND e.target_audience_id IN (SELECT student_id FROM parent_student WHERE parent_id = ?)))` : ''}
-                ${user.role === 'teacher' ? `AND (e.target_audience_type = 'all'
-                    OR (e.target_audience_type = 'department' AND e.target_audience_id = ?)
-                    OR (e.target_audience_type = 'specific_users' AND e.target_audience_id = ?))` : ''}
-                )
+            WHERE 1=1
         `;
-        const params = [user.id]; // для e.created_by = ?
+        const params = [];
 
-        // Добавляем параметры для фильтров в зависимости от роли
-        if (user.role === 'student' && user.class_id) {
-            params.push(user.class_id, user.class_id, user.id);
-        } else if (user.role === 'parent') {
-            params.push(user.id, user.id);
-        } else if (user.role === 'teacher' && user.department_id) {
-            params.push(user.department_id, user.id);
+        // === ОСНОВНОЕ УСЛОВИЕ ВИДИМОСТИ (всё в скобках) ===
+        let visibilityCondition = `
+            (
+                e.status = 'approved'
+                OR (e.status = 'pending' AND e.created_by = ?)
+                OR (e.status = 'pending' AND ? = 'admin')
+            )
+        `;
+        params.push(user.id, user.role);
+
+        // === ФИЛЬТР ПО АУДИТОРИИ (для НЕ админов) ===
+        if (user.role !== 'admin') {
+            visibilityCondition += `
+                AND (
+                    e.created_by = ?
+                    OR e.status != 'approved'
+                )
+            `;
+            params.push(user.id);
+
+            if (user.role === 'student' && user.class_id) {
+                visibilityCondition += `
+                    OR (
+                        e.status = 'approved'
+                        AND (
+                            e.target_audience_type = 'all'
+                            OR (e.target_audience_type = 'class' AND e.target_audience_id = ?)
+                            OR (e.target_audience_type = 'parallel' AND e.target_audience_id = (SELECT grade_level FROM classes WHERE id = ?))
+                            OR (e.target_audience_type = 'specific_users' AND e.target_audience_id = ?)
+                        )
+                    )
+                `;
+                params.push(user.class_id, user.class_id, user.id);
+            } else if (user.role === 'parent') {
+                visibilityCondition += `
+                    OR (
+                        e.status = 'approved'
+                        AND (
+                            e.target_audience_type = 'all'
+                            OR e.target_audience_id IN (SELECT student_id FROM parent_student WHERE parent_id = ?)
+                            OR (e.target_audience_type = 'specific_users' AND e.target_audience_id IN (SELECT student_id FROM parent_student WHERE parent_id = ?))
+                        )
+                    )
+                `;
+                params.push(user.id, user.id);
+            } else if (user.role === 'teacher' && user.department_id) {
+                visibilityCondition += `
+                    OR (
+                        e.status = 'approved'
+                        AND (
+                            e.target_audience_type = 'all'
+                            OR (e.target_audience_type = 'department' AND e.target_audience_id = ?)
+                            OR (e.target_audience_type = 'specific_users' AND e.target_audience_id = ?)
+                        )
+                    )
+                `;
+                params.push(user.department_id, user.id);
+            }
         }
 
-        // Скрываем мероприятия администратора от учеников и родителей
+        sql += ` AND (${visibilityCondition})`;
+
+        // === СКРЫВАЕМ АДМИНСКИЕ СОБЫТИЯ ОТ УЧЕНИКОВ И РОДИТЕЛЕЙ ===
         if (['student', 'parent'].includes(user.role)) {
-            query += ' AND e.is_admin_event = 0';
+            sql += ' AND e.is_admin_event = 0';
         }
 
-        // Если пользователь не создатель, показываем только approved (но мы уже учли это через OR)
-        // Дополнительно: исключаем rejected и canceled из общего списка
-        query += ' AND e.status IN ("approved", "pending")';
+        // === ФИЛЬТРЫ (поиск, статус, тип) ===
+        if (status !== 'all') {
+            sql += ' AND e.status = ?';
+            params.push(status);
+        }
+        if (type !== 'all') {
+            sql += ' AND e.event_type_id = ?';
+            params.push(type);
+        }
+        if (search) {
+            sql += ' AND (e.title LIKE ? OR e.description LIKE ?)';
+            const like = `%${search}%`;
+            params.push(like, like);
+        }
 
-        query += ' ORDER BY e.start_datetime';
+        sql += ' ORDER BY e.start_datetime';
 
-        const [events] = await pool.query(query, params);
+        const [events] = await pool.query(sql, params);
         res.json(events);
     } catch (error) {
         mlog('[ERROR]', 'Ошибка получения событий для календаря', error);
@@ -676,6 +831,108 @@ app.post('/api/events/:id/register', isAuthenticated, async (req, res) => {
     }
 });
 
+// ----- Проверка, записан ли пользователь на мероприятие -----
+app.get('/api/events/:id/is-registered', isAuthenticated, async (req, res) => {
+    const eventId = req.params.id;
+    const userId = req.session.user.id;
+
+    try {
+        const [rows] = await pool.query(
+            'SELECT id FROM event_participants WHERE event_id = ? AND user_id = ?',
+            [eventId, userId]
+        );
+        res.json({ isRegistered: rows.length > 0 });
+    } catch (error) {
+        mlog('[ERROR]', 'Ошибка проверки записи', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+// ----- Отмена записи на мероприятие -----
+app.post('/api/events/:id/unregister', isAuthenticated, async (req, res) => {
+    const eventId = req.params.id;
+    const userId = req.session.user.id;
+
+    try {
+        const [event] = await pool.query(
+            'SELECT title, status FROM events WHERE id = ?',
+            [eventId]
+        );
+        if (event.length === 0) {
+            return res.status(404).json({ error: 'Мероприятие не найдено' });
+        }
+        if (event[0].status !== 'approved') {
+            return res.status(400).json({ error: 'Нельзя отменить запись на это мероприятие' });
+        }
+
+        const [result] = await pool.query(
+            'DELETE FROM event_participants WHERE event_id = ? AND user_id = ?',
+            [eventId, userId]
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(400).json({ error: 'Вы не были записаны на это мероприятие' });
+        }
+
+        mlog(`Пользователь ${userId} отменил запись на мероприятие ${eventId}`);
+        res.json({ success: true, message: 'Вы отменили запись на мероприятие' });
+    } catch (error) {
+        mlog('[ERROR]', 'Ошибка отмены записи', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+// ----- Получение списка участников мероприятия -----
+app.get('/api/events/:id/participants', isAuthenticated, async (req, res) => {
+    const eventId = req.params.id;
+    try {
+        const [participants] = await pool.query(`
+            SELECT u.id, u.full_name, u.class_id, c.name as class_name
+            FROM event_participants ep
+            LEFT JOIN users u ON ep.user_id = u.id
+            LEFT JOIN classes c ON u.class_id = c.id
+            WHERE ep.event_id = ?
+            ORDER BY u.full_name
+        `, [eventId]);
+        res.json(participants);
+    } catch (error) {
+        mlog('[ERROR]', 'Ошибка получения участников', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+// ----- Завершение мероприятия (для организатора или админа) -----
+app.post('/api/events/:id/complete', isAuthenticated, async (req, res) => {
+    const eventId = req.params.id;
+    const userId = req.session.user.id;
+
+    try {
+        // Проверяем, что пользователь — организатор или админ
+        const [event] = await pool.query(
+            'SELECT created_by, status FROM events WHERE id = ?',
+            [eventId]
+        );
+        if (event.length === 0) {
+            return res.status(404).json({ error: 'Мероприятие не найдено' });
+        }
+        if (event[0].status !== 'approved') {
+            return res.status(400).json({ error: 'Можно завершить только утверждённое мероприятие' });
+        }
+        if (event[0].created_by !== userId && req.session.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Нет прав на завершение этого мероприятия' });
+        }
+
+        await pool.query(
+            'UPDATE events SET status = "completed" WHERE id = ?',
+            [eventId]
+        );
+        mlog(`Мероприятие ${eventId} завершено пользователем ${userId}`);
+        res.json({ success: true, message: 'Мероприятие завершено и перемещено в архив' });
+    } catch (error) {
+        mlog('[ERROR]', 'Ошибка завершения мероприятия', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
 // ============================================================
 // ===== ЗАПУСК СЕРВЕРА =====
 // ============================================================

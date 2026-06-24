@@ -1,23 +1,45 @@
 <h1 class="mb-4">📦 Архив мероприятий</h1>
 
-<div class="mb-3">
-    <div class="btn-group" role="group">
-        <button class="btn btn-outline-secondary active" onclick="filterArchive('all')">Все</button>
-        <button class="btn btn-outline-secondary" onclick="filterArchive('completed')">Завершенные</button>
-        <button class="btn btn-outline-secondary" onclick="filterArchive('canceled')">Отмененные</button>
+{{#if events.length}}
+    <div class="row">
+        {{#each events}}
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span class="badge bg-secondary">Завершено</span>
+                        <span class="badge bg-secondary">{{type_name}}</span>
+                    </div>
+                    <div class="card-body">
+                        <h5 class="card-title">{{title}}</h5>
+                        <p class="card-text small">{{description}}</p>
+                        <div class="small text-muted">
+                            <div>📅 {{formatDate start_datetime}} — {{formatDate end_datetime}}</div>
+                            <div>📍 {{location}}</div>
+                            <div>👤 {{creator_name}}</div>
+                            {{#ifEquals ../userRole "teacher"}}
+                                <div>👥 Участников: {{participants_count}}</div>
+                            {{/ifEquals}}
+                            {{#ifEquals ../userRole "parent"}}
+                                <div>👶 {{student_name}}</div>
+                            {{/ifEquals}}
+                            {{#ifEquals ../userRole "student"}}
+                                <div>📝 {{participation_status}}</div>
+                            {{/ifEquals}}
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <button class="btn btn-outline-secondary btn-sm w-100" onclick="alert('Детали мероприятия')">
+                            👁️ Просмотр
+                        </button>
+                    </div>
+                </div>
+            </div>
+        {{/each}}
     </div>
-</div>
-
-<div id="archive-list">
+{{else}}
     <div class="alert alert-info">
-        <p>Здесь будут отображаться завершенные и отмененные мероприятия.</p>
-        <p class="small text-muted">Пока нет данных в архиве.</p>
+        <p>В архиве пока нет мероприятий.</p>
     </div>
-</div>
+{{/if}}
 
-<script>
-    function filterArchive(status) {
-        // В будущем здесь будет AJAX-запрос для фильтрации
-        console.log('Фильтр архива:', status);
-    }
-</script>
+<a href="/" class="btn btn-primary">← Вернуться к календарю</a>
