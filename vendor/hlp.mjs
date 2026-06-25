@@ -2,7 +2,6 @@ import { format } from 'date-fns';
 
 // Хелперы для Handlebars
 export function registerHelpers(handlebarsInstance) {
-    // Пытаемся получить экземпляр Handlebars из переданного объекта
     const hbs = handlebarsInstance?.handlebars || handlebarsInstance;
     
     if (!hbs || typeof hbs.registerHelper !== 'function') {
@@ -18,6 +17,17 @@ export function registerHelpers(handlebarsInstance) {
             return format(new Date(date), 'dd.MM.yyyy HH:mm');
         } catch {
             return date;
+        }
+    });
+    
+    // ===== НОВЫЙ ХЕЛПЕР ДЛЯ INPUT =====
+    hbs.registerHelper('formatDateForInput', function(date) {
+        if (!date) return '';
+        try {
+            const d = new Date(date);
+            return d.toISOString().slice(0, 16);
+        } catch {
+            return '';
         }
     });
     
@@ -68,9 +78,7 @@ export function registerHelpers(handlebarsInstance) {
         return (arg1 === arg2) ? options.fn(this) : options.inverse(this);
     });
 
-    // ===== НОВЫЙ ХЕЛПЕР для передачи данных в JavaScript =====
     hbs.registerHelper('json', function(context) {
-        // Безопасно сериализуем объект в JSON-строку
         try {
             return JSON.stringify(context);
         } catch (e) {
@@ -79,7 +87,7 @@ export function registerHelpers(handlebarsInstance) {
     });
 }
 
-// Утилиты
+// Утилиты (экспортируются для использования в JavaScript, не в шаблонах)
 export function formatDateForInput(date) {
     if (!date) return '';
     try {

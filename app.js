@@ -171,16 +171,6 @@ app.get('/auth/logout', (req, res) => {
 });
 
 
-// ============================================================
-// ===== ПРОФИЛЬ =====
-// ============================================================
-
-app.get('/profile', isAuthenticated, (req, res) => {
-    res.render('profile/index', { 
-        title: 'Мой профиль',
-        user: req.session.user
-    });
-});
 
 // ============================================================
 // ===== АДМИН: ПОЛЬЗОВАТЕЛИ =====
@@ -930,6 +920,28 @@ app.post('/api/events/:id/complete', isAuthenticated, async (req, res) => {
         res.json({ success: true, message: 'Мероприятие завершено и перемещено в архив' });
     } catch (error) {
         mlog('[ERROR]', 'Ошибка завершения мероприятия', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
+
+// ----- Получение одного мероприятия по ID (для модалки) -----
+app.get('/api/events/:id', isAuthenticated, async (req, res) => {
+    const eventId = req.params.id;
+    try {
+        const [events] = await pool.query(`
+            SELECT e.*, u.full_name as creator_name, et.name as type_name,
+                   e.is_registration_enabled
+            FROM events e
+            LEFT JOIN users u ON e.created_by = u.id
+            LEFT JOIN event_types et ON e.event_type_id = et.id
+            WHERE e.id = ?
+        `, [eventId]);
+        if (events.length === 0) {
+            return res.status(404).json({ error: 'Мероприятие не найдено' });
+        }
+        res.json(events[0]);
+    } catch (error) {
+        mlog('[ERROR]', 'Ошибка получения мероприятия', error);
         res.status(500).json({ error: 'Ошибка сервера' });
     }
 });

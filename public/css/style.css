@@ -599,3 +599,50 @@ h1 {
 .border-custom {
     border-color: var(--border-color);
 }
+
+/* ================================================================
+   ДОПОЛНИТЕЛЬНЫЕ УЛУЧШЕНИЯ: карточки, блоки, чекбоксы
+   ================================================================ */
+
+/* Карточки с тенью и контуром */
+.card-outline {
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    transition: box-shadow 0.25s ease, transform 0.2s ease;
+    background: var(--white);
+}
+.card-outline:hover {
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+    transform: translateY(-2px);
+}
+
+/* Внутренние блоки с контуром */
+.block-outline {
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: 0.75rem 1rem;
+    background: var(--white);
+    transition: border-color 0.2s ease;
+}
+.block-outline:hover {
+    border-color: var(--primary-blue);
+}
+
+/* Чекбоксы в блоках — более заметные */
+.form-check-input-lg {
+    width: 1.25rem;
+    height: 1.25rem;
+    margin-top: 0.1rem;
+    accent-color: var(--primary-blue);
+    border-color: var(--border-color);
+    cursor: pointer;
+}
+.form-check-input-lg:checked {
+    background-color: var(--primary-blue);
+    border-color: var(--primary-blue);
+}
+.form-check-label-lg {
+    font-weight: 500;
+    color: var(--dark-gray);
+}

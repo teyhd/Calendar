@@ -1,3 +1,7 @@
+// ================================================================
+// calendar.js – Школьный календарь мероприятий (обновлённая модалка)
+// ================================================================
+
 document.addEventListener('DOMContentLoaded', function() {
     const calendarEl = document.getElementById('calendar');
     if (!calendarEl) return;
@@ -164,9 +168,15 @@ function loadStats() {
 // === ФУНКЦИЯ ОТОБРАЖЕНИЯ МОДАЛЬНОГО ОКНА ===
 // ================================================================
 function renderEventModal(event, props, canEdit, isAdmin, isOwner) {
+    // Защита: если модального окна нет в DOM – выходим
     const modalBody = document.getElementById('eventModalBody');
     const modalFooter = document.getElementById('eventModalFooter');
     const modalTitle = document.getElementById('eventModalLabel');
+    
+    if (!modalBody || !modalFooter || !modalTitle) {
+        console.error('Элементы модального окна не найдены в DOM');
+        return;
+    }
 
     // Статусы
     const statusColors = {
@@ -188,126 +198,149 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner) {
 
     modalTitle.textContent = `📌 ${event.title}`;
 
+    const isRegistrationEnabled = props.is_registration_enabled === 1 || props.is_registration_enabled === true;
+    const showParticipants = isOwner || isAdmin;
+
     // === ТЕЛО МОДАЛКИ ===
     modalBody.innerHTML = `
         <div class="row">
+            <!-- ЛЕВАЯ КОЛОНКА: информация о мероприятии -->
             <div class="col-md-8">
-                <div class="mb-3">
-                    <span class="badge bg-${statusColor}">${statusText}</span>
-                    ${props.is_admin_event ? '<span class="badge bg-danger ms-1">🔒 Только для администраторов</span>' : ''}
-                    ${props.is_registration_enabled ? '<span class="badge bg-info ms-1">📝 Запись открыта</span>' : ''}
+                <!-- Бейджи статуса -->
+                <div class="mb-3 d-flex flex-wrap gap-1">
+                    <span class="badge bg-${statusColor}" style="font-size: 0.9rem; padding: 0.4rem 0.9rem; border-radius: 1rem;">
+                        ${statusText}
+                    </span>
+                    ${props.is_admin_event ? '<span class="badge bg-danger" style="font-size: 0.9rem; padding: 0.4rem 0.9rem; border-radius: 1rem;">🔒 Только для администраторов</span>' : ''}
+                    ${isRegistrationEnabled ? '<span class="badge bg-info" style="font-size: 0.9rem; padding: 0.4rem 0.9rem; border-radius: 1rem;">📝 Запись открыта</span>' : ''}
                 </div>
 
-                <div class="mb-3">
-                    <strong>📅 Дата и время:</strong><br>
-                    ${new Date(props.start_datetime).toLocaleString('ru-RU')} — ${new Date(props.end_datetime).toLocaleString('ru-RU')}
+                <!-- Дата и время -->
+                <div class="mb-2" style="display: flex; align-items: baseline; gap: 0.5rem;">
+                    <span style="font-weight: 600; color: #172033; min-width: 110px;">📅 Дата и время:</span>
+                    <span>${new Date(props.start_datetime).toLocaleString('ru-RU')} — ${new Date(props.end_datetime).toLocaleString('ru-RU')}</span>
                 </div>
 
+                <!-- Место -->
                 ${props.location ? `
-                    <div class="mb-3">
-                        <strong>📍 Место:</strong><br>
-                        ${props.location}
+                    <div class="mb-2" style="display: flex; align-items: baseline; gap: 0.5rem;">
+                        <span style="font-weight: 600; color: #172033; min-width: 110px;">📍 Место:</span>
+                        <span>${props.location}</span>
                     </div>
                 ` : ''}
 
+                <!-- Описание -->
                 ${props.description ? `
-                    <div class="mb-3">
-                        <strong>📝 Описание:</strong><br>
-                        ${props.description}
+                    <div class="mb-2" style="display: flex; align-items: flex-start; gap: 0.5rem;">
+                        <span style="font-weight: 600; color: #172033; min-width: 110px;">📝 Описание:</span>
+                        <span>${props.description}</span>
                     </div>
                 ` : ''}
 
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <strong>📂 Тип:</strong> ${props.type || 'Не указан'}
+                <!-- Тип и уровень -->
+                <div class="row mb-2">
+                    <div class="col-6">
+                        <span style="font-weight: 600; color: #172033;">📂 Тип:</span>
+                        <span>${props.type || 'Не указан'}</span>
                     </div>
-                    <div class="col-md-6">
-                        <strong>🏷️ Уровень:</strong>
-                        ${props.level === 'school' ? '🏫 Школьное' :
-                          props.level === 'city' ? '🏙️ Городское' :
-                          props.level === 'regional' ? '🌍 Региональное' :
-                          props.level === 'national' ? '🇷🇺 Всероссийское' :
-                          props.level === 'international' ? '🌐 Международное' : 'Не указан'}
+                    <div class="col-6">
+                        <span style="font-weight: 600; color: #172033;">🏷️ Уровень:</span>
+                        <span>${props.level === 'school' ? '🏫 Школьное' :
+                                props.level === 'city' ? '🏙️ Городское' :
+                                props.level === 'regional' ? '🌍 Региональное' :
+                                props.level === 'national' ? '🇷🇺 Всероссийское' :
+                                props.level === 'international' ? '🌐 Международное' : 'Не указан'}</span>
                     </div>
                 </div>
 
-                <div class="mb-3">
-                    <strong>👤 Организатор:</strong> ${props.creator || 'Неизвестен'}
+                <!-- Организатор -->
+                <div class="mb-2" style="display: flex; align-items: baseline; gap: 0.5rem;">
+                    <span style="font-weight: 600; color: #172033; min-width: 110px;">👤 Организатор:</span>
+                    <span>${props.creator || 'Неизвестен'}</span>
                 </div>
 
-                <div class="mb-3">
-                    <strong>🎯 Аудитория:</strong>
-                    ${props.target_audience_type === 'all' ? 'Все пользователи' :
-                      props.target_audience_type === 'class' ? `Класс (ID: ${props.target_audience_id})` :
-                      props.target_audience_type === 'parallel' ? `Параллель (ID: ${props.target_audience_id})` :
-                      props.target_audience_type === 'department' ? `Кафедра (ID: ${props.target_audience_id})` :
-                      props.target_audience_type === 'specific_users' ? `Конкретные пользователи (ID: ${props.target_audience_id})` : 'Не указана'}
+                <!-- Аудитория -->
+                <div class="mb-2" style="display: flex; align-items: baseline; gap: 0.5rem;">
+                    <span style="font-weight: 600; color: #172033; min-width: 110px;">🎯 Аудитория:</span>
+                    <span>${props.target_audience_type === 'all' ? 'Все пользователи' :
+                            props.target_audience_type === 'class' ? `Класс (ID: ${props.target_audience_id})` :
+                            props.target_audience_type === 'parallel' ? `Параллель (ID: ${props.target_audience_id})` :
+                            props.target_audience_type === 'department' ? `Кафедра (ID: ${props.target_audience_id})` :
+                            props.target_audience_type === 'specific_users' ? `Конкретные пользователи (ID: ${props.target_audience_id})` : 'Не указана'}</span>
                 </div>
 
+                <!-- Дата создания -->
                 ${props.created_at ? `
-                    <div class="text-muted small mt-3">
+                    <div class="text-muted small mt-3" style="border-top: 1px solid #e9ecef; padding-top: 0.75rem;">
                         Создано: ${new Date(props.created_at).toLocaleString('ru-RU')}
+                        ${props.updated_at && props.updated_at !== props.created_at ? `(обновлено: ${new Date(props.updated_at).toLocaleString('ru-RU')})` : ''}
                     </div>
-                ` : ''}
-
-                <!-- БЛОК УЧАСТНИКОВ (для организатора или админа) -->
-                ${(isOwner || isAdmin) ? `
-                <div id="participantsContainer" style="margin-top: 1rem; display: none;">
-                    <hr>
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h6 class="mb-0">👥 Участники (<span id="participantsCount">0</span>)</h6>
-                    </div>
-                    <div id="participantsList" class="small mt-2" style="max-height: 150px; overflow-y: auto; border: 1px solid #e9ecef; border-radius: 0.25rem; padding: 0.5rem;">
-                        <span class="text-muted">Загрузка...</span>
-                    </div>
-                </div>
                 ` : ''}
             </div>
 
+            <!-- ПРАВАЯ КОЛОНКА: участники или статус -->
             <div class="col-md-4">
-                <div class="card bg-light border-0 shadow-sm">
-                    <div class="card-body">
-                        <h6 class="card-title">📊 Статус</h6>
-                        <p class="card-text">
-                            <span class="badge bg-${statusColor} fs-6">${statusText}</span>
-                        </p>
-                        ${props.status === 'pending' ? `
-                            <div class="alert alert-warning small mb-0">
-                                ⏳ Мероприятие ожидает утверждения администратором.
+                ${showParticipants ? `
+                    <!-- Блок участников (для организатора/админа) -->
+                    <div id="participantsContainer" style="display: none;">
+                        <div class="card bg-light border-0 shadow-sm">
+                            <div class="card-body">
+                                <h6 class="card-title fw-semibold mb-2" style="color: #172033;">
+                                    👥 Участники (<span id="participantsCount">0</span>)
+                                </h6>
+                                <div id="participantsList" class="small" style="max-height: 250px; overflow-y: auto;">
+                                    <span class="text-muted">Загрузка...</span>
+                                </div>
                             </div>
-                        ` : ''}
-                        ${props.status === 'approved' ? `
-                            <div class="alert alert-success small mb-0">
-                                ✅ Мероприятие опубликовано и доступно для просмотра.
-                            </div>
-                        ` : ''}
-                        ${props.status === 'rejected' ? `
-                            <div class="alert alert-danger small mb-0">
-                                ❌ Мероприятие отклонено.
-                            </div>
-                        ` : ''}
-                        ${props.status === 'completed' ? `
-                            <div class="alert alert-info small mb-0">
-                                ✔️ Мероприятие завершено.
-                            </div>
-                        ` : ''}
-                        ${props.status === 'canceled' ? `
-                            <div class="alert alert-secondary small mb-0">
-                                🚫 Мероприятие отменено.
-                            </div>
-                        ` : ''}
+                        </div>
                     </div>
-                </div>
+                ` : `
+                    <!-- Для обычных пользователей: краткий статус -->
+                    <div class="card bg-light border-0 shadow-sm">
+                        <div class="card-body">
+                            <h6 class="card-title fw-semibold mb-2" style="color: #172033;">📊 Статус</h6>
+                            <span class="badge bg-${statusColor} fs-6" style="font-size: 1rem; padding: 0.4rem 1rem; border-radius: 1rem;">
+                                ${statusText}
+                            </span>
+                            ${props.status === 'pending' ? `
+                                <div class="alert alert-warning border-0 small mt-2 mb-0">
+                                    ⏳ Мероприятие ожидает утверждения администратором.
+                                </div>
+                            ` : ''}
+                            ${props.status === 'rejected' ? `
+                                <div class="alert alert-danger border-0 small mt-2 mb-0">
+                                    ❌ Мероприятие отклонено.
+                                </div>
+                            ` : ''}
+                            ${props.status === 'completed' ? `
+                                <div class="alert alert-info border-0 small mt-2 mb-0">
+                                    ✔️ Мероприятие завершено.
+                                </div>
+                            ` : ''}
+                            ${props.status === 'canceled' ? `
+                                <div class="alert alert-secondary border-0 small mt-2 mb-0">
+                                    🚫 Мероприятие отменено.
+                                </div>
+                            ` : ''}
+                            ${props.status === 'approved' ? `
+                                <div class="alert alert-success border-0 small mt-2 mb-0">
+                                    ✅ Мероприятие опубликовано.
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                `}
             </div>
         </div>
     `;
 
     // === ЗАГРУЗКА УЧАСТНИКОВ (если организатор или админ) ===
-    if (isOwner || isAdmin) {
+    if (showParticipants) {
         const container = document.getElementById('participantsContainer');
         const list = document.getElementById('participantsList');
         const count = document.getElementById('participantsCount');
 
+        // Проверяем, что элементы существуют
         if (container && list && count) {
             container.style.display = 'block';
 
@@ -327,13 +360,15 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner) {
                     console.error('Ошибка загрузки участников:', err);
                     list.innerHTML = '<span class="text-danger">Не удалось загрузить участников</span>';
                 });
+        } else {
+            console.warn('Элементы для списка участников не найдены');
         }
     }
 
-    // === ФУТЕР МОДАЛКИ (кнопки) ===
+    // === ФУТЕР МОДАЛКИ (только кнопки действий, БЕЗ "Закрыть") ===
     let footerButtons = '';
 
-    // Редактирование
+    // Редактирование (только если canEdit)
     if (canEdit) {
         footerButtons += `
             <a href="/events/edit/${event.id}" class="btn btn-primary">
@@ -341,6 +376,7 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner) {
             </a>
         `;
     }
+
     // Кнопка "Завершить" (для организатора или админа, если статус approved)
     if ((isOwner || isAdmin) && props.status === 'approved') {
         footerButtons += `
@@ -352,51 +388,43 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner) {
 
     // Запись / отмена записи (для учеников и родителей)
     const userRole = window.currentUserRole;
-    const isRegistrationEnabled = props.is_registration_enabled === 1 || props.is_registration_enabled === true;
-
     if ((userRole === 'student' || userRole === 'parent') && props.status === 'approved' && isRegistrationEnabled) {
-        // Проверяем, записан ли уже пользователь (или его ребенок для родителя)
-        let checkUrl = `/api/events/${event.id}/is-registered`;
-        // Для родителя нужно проверить, записан ли его ребенок, но пока упростим: проверим самого пользователя
-        // В будущем можно добавить выбор ребенка для родителя
-        fetch(checkUrl)
+        fetch(`/api/events/${event.id}/is-registered`)
             .then(res => res.json())
             .then(data => {
+                let buttons = footerButtons;
                 if (data.isRegistered) {
-                    // Уже записан → показываем кнопку "Отменить запись"
-                    footerButtons += `
+                    buttons += `
                         <button type="button" class="btn btn-danger" onclick="unregisterFromEvent(${event.id})">
                             ❌ Отменить запись
                         </button>
                     `;
                 } else {
-                    // Не записан → показываем кнопку "Записаться"
-                    footerButtons += `
+                    buttons += `
                         <button type="button" class="btn btn-success" onclick="registerForEvent(${event.id})">
                             📝 Записаться
                         </button>
                     `;
                 }
-                // Обновляем футер
-                modalFooter.innerHTML = footerButtons;
+                modalFooter.innerHTML = buttons;
             })
             .catch(() => {
-                // Если ошибка – показываем кнопку "Записаться" по умолчанию
-                footerButtons += `
+                // При ошибке показываем кнопку "Записаться" по умолчанию
+                let buttons = footerButtons;
+                buttons += `
                     <button type="button" class="btn btn-success" onclick="registerForEvent(${event.id})">
                         📝 Записаться
                     </button>
                 `;
-                modalFooter.innerHTML = footerButtons;
+                modalFooter.innerHTML = buttons;
             });
     } else {
-        // Если запись не разрешена или статус не approved – просто закрыть
-        footerButtons += `
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
-        `;
         modalFooter.innerHTML = footerButtons;
     }
 }
+
+// Делаем функцию глобальной для вызова из main.js
+window.renderEventModal = renderEventModal;
 
 // ================================================================
 // === ФУНКЦИЯ ЗАПИСИ НА МЕРОПРИЯТИЕ ===
