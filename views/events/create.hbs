@@ -58,7 +58,7 @@
                         </div>
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label for="subject_id" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Предмет?</label>
+                                <label for="subject_id" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Предмет</label>
                                 <select class="form-select" id="subject_id" name="subject_id">
                                     <option value="">Не выбрано</option>
                                     {{#each subjects}}
@@ -102,7 +102,7 @@
                                         <select class="form-select" id="target_audience_type" name="target_audience_type" required>
                                             <option value="class">📚 Конкретный класс</option>
                                             <option value="parallel">📖 Целая параллель</option>
-                                            <option value="department">🏛️ Кафедра?</option>
+                                            <option value="department">🏛️ Кафедра</option>
                                             <option value="specific_users">👤 Конкретные пользователи</option>
                                             <option value="all">🌍 Все пользователи</option>
                                         </select>
@@ -237,14 +237,14 @@
 </div>
 
 <script>
-    // (скрипт без изменений, он работает)
     document.addEventListener('DOMContentLoaded', function() {
         const typeSelect = document.getElementById('target_audience_type');
         const targetSelect = document.getElementById('target_audience_id');
         
-        const classes = {{{json classes}}};
-        const departments = {{{json departments}}};
-        const users = {{{json users}}};
+        // Данные из сервера (адаптированы под новую структуру)
+        const classes = {{{json classes}}};      // массив {id, name}
+        const departments = {{{json departments}}}; // массив {id, name}
+        const users = {{{json users}}};          // массив {id, name, type}
         
         function updateAudienceOptions() {
             const type = typeSelect.value;
@@ -258,14 +258,15 @@
             let options = [];
             
             if (type === 'class') {
-                options = classes.map(c => ({value: c.id, text: `${c.name} (${c.grade_level} класс)`}));
+                options = classes.map(c => ({value: c.id, text: c.name}));
             } else if (type === 'parallel') {
-                const parallels = [...new Set(classes.map(c => c.grade_level))].sort();
+                // Для параллелей извлекаем номера классов (например, из названий "5-1" → "5")
+                const parallels = [...new Set(classes.map(c => c.name.replace(/-.*$/, '')))].sort();
                 options = parallels.map(p => ({value: p, text: `${p} класс`}));
             } else if (type === 'department') {
                 options = departments.map(d => ({value: d.id, text: d.name}));
             } else if (type === 'specific_users') {
-                options = users.map(u => ({value: u.id, text: `${u.full_name} (${u.email})`}));
+                options = users.map(u => ({value: u.id, text: `${u.name} (${u.type === 1 ? 'Ученик' : 'Учитель'})`}));
             } else if (type === 'all') {
                 targetSelect.innerHTML = '<option value="">Все пользователи системы</option>';
                 return;

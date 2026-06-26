@@ -5,16 +5,16 @@
             <p class="text-muted">Планируйте и отслеживайте все школьные события</p>
         </div>
         <div class="col-md-6 text-md-end">
-            {{#if (eq user.role "teacher")}}
+            {{#ifEquals user.type 2}}
                 <a href="/events/create" class="btn btn-primary btn-lg">
                     <i class="bi bi-plus-circle"></i> Создать мероприятие
                 </a>
-            {{/if}}
-            {{#if (eq user.role "admin")}}
+            {{/ifEquals}}
+            {{#ifEquals user.type 5}}
                 <a href="/events/moderation" class="btn btn-warning btn-lg me-2">
                     <i class="bi bi-clock-history"></i> Модерация
                 </a>
-            {{/if}}
+            {{/ifEquals}}
         </div>
     </div>
 </div>
@@ -105,29 +105,6 @@
 
 <!-- Календарь -->
 <div id="calendar" class="shadow-sm rounded-3 p-3 bg-white"></div>
-
-<!-- Модальное окно для просмотра мероприятия (оставляем как есть) -->
-<div class="modal fade" id="eventModal" tabindex="-1" aria-hidden="true">
-    <!-- ... (оставляем без изменений) ... -->
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="eventModalLabel">📌 Мероприятие</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
-            </div>
-            <div class="modal-body" id="eventModalBody">
-                <div class="text-center py-3">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Загрузка...</span>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer" id="eventModalFooter">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
-            </div>
-        </div>
-    </div>
-</div>
 
 <script>
     function changeView(viewName) {

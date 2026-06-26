@@ -82,9 +82,9 @@ document.addEventListener('DOMContentLoaded', function() {
             const event = info.event;
             const props = event.extendedProps;
             const userId = window.currentUserId;
-            const userRole = window.currentUserRole;
+            const userRole = parseInt(window.currentUserRole); // теперь число
             const isOwner = parseInt(props.created_by) === parseInt(userId);
-            const isAdmin = userRole === 'admin';
+            const isAdmin = userRole === 5; // 5 = Админ
             const canEdit = isAdmin || (isOwner && props.status === 'pending');
 
             renderEventModal(event, props, canEdit, isAdmin, isOwner);
@@ -352,7 +352,7 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner) {
                         list.innerHTML = '<span class="text-muted">Нет участников</span>';
                     } else {
                         list.innerHTML = participants.map(p => 
-                            `<div class="py-1 border-bottom border-light">👤 ${p.full_name} ${p.class_name ? '(' + p.class_name + ')' : ''}</div>`
+                            `<div class="py-1 border-bottom border-light">👤 ${p.name} ${p.class_name ? '(' + p.class_name + ')' : ''}</div>`
                         ).join('');
                     }
                 })
@@ -387,8 +387,8 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner) {
     }
 
     // Запись / отмена записи (для учеников и родителей)
-    const userRole = window.currentUserRole;
-    if ((userRole === 'student' || userRole === 'parent') && props.status === 'approved' && isRegistrationEnabled) {
+    const userRole = parseInt(window.currentUserRole);
+    if ((userRole === 1 || userRole === 6) && props.status === 'approved' && isRegistrationEnabled) {
         fetch(`/api/events/${event.id}/is-registered`)
             .then(res => res.json())
             .then(data => {

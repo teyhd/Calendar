@@ -20,7 +20,6 @@ export function registerHelpers(handlebarsInstance) {
         }
     });
     
-    // ===== НОВЫЙ ХЕЛПЕР ДЛЯ INPUT =====
     hbs.registerHelper('formatDateForInput', function(date) {
         if (!date) return '';
         try {
@@ -53,14 +52,15 @@ export function registerHelpers(handlebarsInstance) {
         return texts[status] || status;
     });
     
-    hbs.registerHelper('roleText', (role) => {
-        const texts = {
-            admin: 'Администратор',
-            teacher: 'Учитель',
-            student: 'Ученик',
-            parent: 'Родитель'
+    // Хелпер для отображения роли по числовому типу (1-Ученик, 2-Учитель, 5-Админ, 6-Родитель)
+    hbs.registerHelper('roleText', (type) => {
+        const roles = {
+            1: 'Ученик',
+            2: 'Учитель',
+            5: 'Админ',
+            6: 'Родитель'
         };
-        return texts[role] || role;
+        return roles[type] || 'Неизвестно';
     });
     
     hbs.registerHelper('audienceTypeText', (type) => {
@@ -84,6 +84,24 @@ export function registerHelpers(handlebarsInstance) {
         } catch (e) {
             return '{}';
         }
+    });
+
+    // === ДОПОЛНИТЕЛЬНЫЕ ХЕЛПЕРЫ ДЛЯ РАБОТЫ С ЧИСЛОВЫМИ ТИПАМИ ===
+    // Хелпер для проверки роли: {{#ifRole 5}} ... {{/ifRole}}
+    hbs.registerHelper('ifRole', function(roleType, options) {
+        const userType = this.user?.type;
+        return (userType === roleType) ? options.fn(this) : options.inverse(this);
+    });
+
+    // Хелпер для получения названия роли по числовому типу: {{roleName user.type}}
+    hbs.registerHelper('roleName', function(type) {
+        const roles = {
+            1: 'Ученик',
+            2: 'Учитель',
+            5: 'Админ',
+            6: 'Родитель'
+        };
+        return roles[type] || 'Неизвестно';
     });
 }
 

@@ -100,11 +100,11 @@
                                     <div class="mb-3">
                                         <label for="target_audience_type" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Тип аудитории *</label>
                                         <select class="form-select" id="target_audience_type" name="target_audience_type" required>
-                                            <option value="class">📚 Конкретный класс</option>
-                                            <option value="parallel">📖 Целая параллель</option>
-                                            <option value="department">🏛️ Кафедра?</option>
-                                            <option value="specific_users">👤 Конкретные пользователи</option>
-                                            <option value="all">🌍 Все пользователи</option>
+                                            <option value="class" {{#if (eq event.target_audience_type "class")}}selected{{/if}}>📚 Конкретный класс</option>
+                                            <option value="parallel" {{#if (eq event.target_audience_type "parallel")}}selected{{/if}}>📖 Целая параллель</option>
+                                            <option value="department" {{#if (eq event.target_audience_type "department")}}selected{{/if}}>🏛️ Кафедра</option>
+                                            <option value="specific_users" {{#if (eq event.target_audience_type "specific_users")}}selected{{/if}}>👤 Конкретные пользователи</option>
+                                            <option value="all" {{#if (eq event.target_audience_type "all")}}selected{{/if}}>🌍 Все пользователи</option>
                                         </select>
                                     </div>
                                 </div>
@@ -121,14 +121,14 @@
                     </div>
                     
                     <!-- Блок: Запись на мероприятие -->
-                    <div class="card bg-light border-0 mb-3">
-                        <div class="card-header bg-transparent border-bottom-0 pt-3 pb-0">
+                    <div class="block-outline mb-3">
+                        <div class="card-header bg-transparent border-bottom-0 pt-2 pb-0 px-0">
                             <h6 class="mb-0 fw-semibold" style="color: var(--dark-gray, #172033);">📝 Запись на мероприятие</h6>
                         </div>
-                        <div class="card-body">
+                        <div class="card-body px-0 pb-0">
                             <div class="form-check mb-3">
-                                <input class="form-check-input" type="checkbox" id="is_registration_enabled" name="is_registration_enabled" value="1" {{#if event.is_registration_enabled}}checked{{/if}}>
-                                <label class="form-check-label" for="is_registration_enabled">
+                                <input class="form-check-input form-check-input-lg" type="checkbox" id="is_registration_enabled" name="is_registration_enabled" value="1" {{#if event.is_registration_enabled}}checked{{/if}}>
+                                <label class="form-check-label form-check-label-lg" for="is_registration_enabled">
                                     Участники могут записываться на это мероприятие
                                 </label>
                                 <div class="form-text text-muted small">
@@ -183,11 +183,11 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // ---------- Данные из сервера ----------
-        const classes = {{{json classes}}};
-        const departments = {{{json departments}}};
-        const users = {{{json users}}};
-        const currentEvent = {{{json event}}}; // текущее мероприятие
+        // ---------- Данные из сервера (адаптированы под новую структуру) ----------
+        const classes = {{{json classes}}};      // массив {id, name}
+        const departments = {{{json departments}}}; // массив {id, name}
+        const users = {{{json users}}};          // массив {id, name, type}
+        const currentEvent = {{{json event}}};
 
         // ---------- Аудитория ----------
         const typeSelect = document.getElementById('target_audience_type');
@@ -205,14 +205,14 @@
             let options = [];
 
             if (type === 'class') {
-                options = classes.map(c => ({value: c.id, text: `${c.name} (${c.grade_level} класс)`}));
+                options = classes.map(c => ({value: c.id, text: c.name}));
             } else if (type === 'parallel') {
-                const parallels = [...new Set(classes.map(c => c.grade_level))].sort();
+                const parallels = [...new Set(classes.map(c => c.name.replace(/-.*$/, '')))].sort();
                 options = parallels.map(p => ({value: p, text: `${p} класс`}));
             } else if (type === 'department') {
                 options = departments.map(d => ({value: d.id, text: d.name}));
             } else if (type === 'specific_users') {
-                options = users.map(u => ({value: u.id, text: `${u.full_name} (${u.email})`}));
+                options = users.map(u => ({value: u.id, text: `${u.name} (${u.type === 1 ? 'Ученик' : 'Учитель'})`}));
             } else if (type === 'all') {
                 targetSelect.innerHTML = '<option value="">Все пользователи системы</option>';
                 return;

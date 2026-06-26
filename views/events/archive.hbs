@@ -26,13 +26,13 @@
                             <div>📅 {{formatDate start_datetime}} — {{formatDate end_datetime}}</div>
                             <div>📍 {{location}}</div>
                             <div>👤 {{creator_name}}</div>
-                            {{#ifEquals ../userRole "teacher"}}
+                            {{#ifEquals ../userType 2}}
                                 <div>👥 Участников: {{participants_count}}</div>
                             {{/ifEquals}}
-                            {{#ifEquals ../userRole "parent"}}
+                            {{#ifEquals ../userType 6}}
                                 <div>👶 {{student_name}}</div>
                             {{/ifEquals}}
-                            {{#ifEquals ../userRole "student"}}
+                            {{#ifEquals ../userType 1}}
                                 <div>📝 {{participation_status}}</div>
                             {{/ifEquals}}
                         </div>

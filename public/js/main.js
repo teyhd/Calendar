@@ -26,7 +26,6 @@ document.addEventListener('DOMContentLoaded', function() {
 window.openEventModal = function(eventId) {
     console.log('openEventModal вызван с ID:', eventId);
     
-    // Показываем индикатор загрузки
     const modalBody = document.getElementById('eventModalBody');
     if (modalBody) {
         modalBody.innerHTML = `
@@ -39,7 +38,6 @@ window.openEventModal = function(eventId) {
         `;
     }
 
-    // Загружаем данные мероприятия
     fetch(`/api/events/${eventId}`)
         .then(response => {
             if (!response.ok) throw new Error('Мероприятие не найдено');
@@ -48,16 +46,17 @@ window.openEventModal = function(eventId) {
         .then(eventData => {
             console.log('Данные мероприятия загружены:', eventData);
             
-            // Проверяем, что renderEventModal существует
             if (typeof renderEventModal === 'undefined') {
                 console.error('renderEventModal не определена!');
                 return;
             }
 
-            const userId = window.currentUserId || 0;
-            const userRole = window.currentUserRole || '';
-            const isOwner = parseInt(eventData.created_by) === parseInt(userId);
-            const isAdmin = userRole === 'admin';
+            // Получаем текущего пользователя из сессии (передаётся через мета-теги)
+            const userId = parseInt(window.currentUserId || 0);
+            const userType = parseInt(window.currentUserRole || 0); // теперь число
+            
+            const isOwner = parseInt(eventData.created_by) === userId;
+            const isAdmin = userType === 5;
             const canEdit = isAdmin || (isOwner && eventData.status === 'pending');
 
             const event = {
@@ -106,13 +105,10 @@ window.openEventModal = function(eventId) {
 // === ОБРАБОТЧИК КЛИКОВ НА КАРТОЧКИ (делегирование) ===
 // ================================================================
 document.addEventListener('DOMContentLoaded', function() {
-    // Используем делегирование — обработчик на весь документ
     document.addEventListener('click', function(e) {
-        // Ищем ближайший элемент с data-event-id
         const card = e.target.closest('[data-event-id]');
         if (!card) return;
         
-        // Если клик был по кнопке, ссылке или форме внутри карточки — игнорируем
         if (e.target.closest('a') || e.target.closest('button') || e.target.closest('form')) {
             return;
         }
