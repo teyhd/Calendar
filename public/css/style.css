@@ -646,3 +646,31 @@ h1 {
     font-weight: 500;
     color: var(--dark-gray);
 }
+
+/* Кнопка открытия sidebar */
+.navbar .btn-outline-light {
+    border-color: rgba(255,255,255,0.3);
+    color: rgba(255,255,255,0.9);
+    transition: all 0.2s;
+    padding: 0.25rem 0.5rem;
+    font-size: 1.25rem;
+    line-height: 1;
+}
+.navbar .btn-outline-light:hover {
+    background-color: rgba(255,255,255,0.1);
+    border-color: rgba(255,255,255,0.5);
+}
+.navbar .btn-outline-light i {
+    font-size: 1.5rem;
+}
+
+/* На мобильных делаем кнопку компактнее */
+@media (max-width: 576px) {
+    .navbar .btn-outline-light {
+        padding: 0.15rem 0.4rem;
+        font-size: 1rem;
+    }
+    .navbar .btn-outline-light i {
+        font-size: 1.2rem;
+    }
+}

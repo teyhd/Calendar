@@ -1,81 +1,142 @@
-<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-    <div class="container">
-        <a class="navbar-brand" href="/">📅 Школьный календарь</a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-            <span class="navbar-toggler-icon"></span>
-        </button>
-        <div class="collapse navbar-collapse" id="navbarNav">
-            <ul class="navbar-nav ms-auto">
-                {{#if isAuthenticated}}
-                    <li class="nav-item"><a class="nav-link" href="/">Календарь</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/events/archive">📦 Архив</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/my-events">📋 Мои мероприятия</a></li>
-                    
-                    {{#ifEquals user.type 2}}
-                        <li class="nav-item"><a class="nav-link" href="/events/create">➕ Создать</a></li>
-                    {{/ifEquals}}
-                    
-                    {{#ifEquals user.type 5}}
-                        <li class="nav-item"><a class="nav-link" href="/events/moderation">Модерация</a></li>
-                        <li class="nav-item"><a class="nav-link" href="/admin/users">Пользователи</a></li>
-                        <li class="nav-item"><a class="nav-link" href="/admin/settings">Настройки</a></li>
-                    {{/ifEquals}}
-                    
-                    <!-- Уведомления -->
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="notificationsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            🔔
-                            {{#if unreadCount}}
-                                <span class="badge bg-danger">{{unreadCount}}</span>
-                            {{/if}}
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="notificationsDropdown" style="min-width: 300px;">
-                            {{#if notifications.length}}
-                                {{#each notifications}}
-                                    <li>
-                                        <a class="dropdown-item" href="#">
-                                            <small>{{this.message}}</small>
-                                            <br>
-                                            <span class="text-muted" style="font-size: 0.7rem;">{{formatDate this.created_at}}</span>
-                                            {{#unless this.is_read}}
-                                                <span class="badge bg-primary">Новое</span>
-                                            {{/unless}}
-                                        </a>
-                                    </li>
-                                {{/each}}
-                                <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item text-center" href="/notifications/all">Все уведомления</a></li>
-                            {{else}}
-                                <li><span class="dropdown-item text-muted">Нет уведомлений</span></li>
-                            {{/if}}
-                        </ul>
-                    </li>
-                    
-                    <!-- Профиль пользователя (dropdown) -->
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="userDropdown" 
-                           role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="bi bi-person-circle"></i> {{user.name}}
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
-                            <li>
-                                <div class="dropdown-item-text">
-                                    <small class="text-muted">{{user.role_name}}</small>
-                                </div>
-                            </li>
+{{#if isAuthenticated}}
+    <!-- Навбар для авторизованных пользователей -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <!-- Кнопка для открытия sidebar (всегда видна) -->
+            <button class="btn btn-outline-light me-2" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebar" aria-controls="sidebar">
+                <i class="bi bi-list"></i>
+            </button>
+            <a class="navbar-brand" href="/">📅 Школьный календарь</a>
+            
+            <!-- Правая часть навбара (уведомления, профиль, выход) -->
+            <div class="d-flex align-items-center ms-auto">
+                <!-- Уведомления -->
+                <div class="dropdown me-2">
+                    <a class="nav-link dropdown-toggle text-white" href="#" id="notificationsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        🔔
+                        {{#if unreadCount}}
+                            <span class="badge bg-danger">{{unreadCount}}</span>
+                        {{/if}}
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="notificationsDropdown" style="min-width: 300px;">
+                        {{#if notifications.length}}
+                            {{#each notifications}}
+                                <li>
+                                    <a class="dropdown-item" href="#">
+                                        <small>{{this.message}}</small>
+                                        <br>
+                                        <span class="text-muted" style="font-size: 0.7rem;">{{formatDate this.created_at}}</span>
+                                        {{#unless this.is_read}}
+                                            <span class="badge bg-primary">Новое</span>
+                                        {{/unless}}
+                                    </a>
+                                </li>
+                            {{/each}}
                             <li><hr class="dropdown-divider"></li>
-                            <li>
-                                <a class="dropdown-item" href="/auth/logout">
-                                    <i class="bi bi-box-arrow-right"></i> Выйти
-                                </a>
-                            </li>
-                        </ul>
+                            <li><a class="dropdown-item text-center" href="/notifications/all">Все уведомления</a></li>
+                        {{else}}
+                            <li><span class="dropdown-item text-muted">Нет уведомлений</span></li>
+                        {{/if}}
+                    </ul>
+                </div>
+
+                <!-- Профиль пользователя -->
+                <div class="dropdown me-2">
+                    <a class="nav-link dropdown-toggle text-white" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-person-circle"></i> {{user.name}}
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                        <li><span class="dropdown-item-text"><strong>{{user.role_name}}</strong></span></li>
+                        <li><hr class="dropdown-divider"></li>
+                        {{#unless (eq user.type 5)}}
+                            <li><span class="dropdown-item-text"><small>Класс/Кафедра: {{#if user.kaf_name}}{{user.kaf_name}}{{else}}Не указан{{/if}}</small></span></li>
+                        {{/unless}}
+                    </ul>
+                </div>
+
+                <!-- Кнопка выхода (без рамки) -->
+                <a href="/auth/logout" class="btn btn-link text-white text-decoration-none btn-sm">Выйти</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ============ SIDEBAR (Offcanvas) ============ -->
+    <div class="offcanvas offcanvas-start" tabindex="-1" id="sidebar" aria-labelledby="sidebarLabel">
+        <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="sidebarLabel">📅 Меню</h5>
+            <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Закрыть"></button>
+        </div>
+        <div class="offcanvas-body">
+            <!-- Информация о пользователе -->
+            <div class="mb-4">
+                <div class="fw-bold" style="font-size: 1.1rem;">{{user.name}}</div>
+                <div class="text-muted small">{{user.role_name}}</div>
+                <div class="text-muted small">Класс/Кафедра: {{#if user.kaf_name}}{{user.kaf_name}}{{else}}Не указан{{/if}}</div>
+            </div>
+            <hr>
+
+            <!-- Ссылки меню -->
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link" href="/">
+                        <i class="bi bi-calendar-event me-2"></i> Календарь
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/events/archive">
+                        <i class="bi bi-archive me-2"></i> Архив
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/my-events">
+                        <i class="bi bi-list-ul me-2"></i> Мои мероприятия
+                    </a>
+                </li>
+
+                {{#ifEquals user.type 2}}
+                    <li class="nav-item">
+                        <a class="nav-link" href="/events/create">
+                            <i class="bi bi-plus-circle me-2"></i> Создать
+                        </a>
                     </li>
-                    
-                {{else}}
-                    <li class="nav-item"><a class="nav-link" href="/auth/login">Войти</a></li>
-                {{/if}}
+                {{/ifEquals}}
+
+                {{#ifEquals user.type 5}}
+                    <li class="nav-item">
+                        <a class="nav-link" href="/events/moderation">
+                            <i class="bi bi-clock-history me-2"></i> Модерация
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/admin/users">
+                            <i class="bi bi-people me-2"></i> Пользователи
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/admin/settings">
+                            <i class="bi bi-gear me-2"></i> Настройки
+                        </a>
+                    </li>
+                {{/ifEquals}}
             </ul>
+
+            <hr>
+            <div class="mt-3">
+                <a href="/auth/logout" class="btn btn-danger w-100">
+                    <i class="bi bi-box-arrow-right me-2"></i> Выйти
+                </a>
+            </div>
         </div>
     </div>
-</nav>
+
+{{else}}
+    <!-- Навбар для неавторизованных (страница входа) -->
+    <nav class="navbar navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">📅 Школьный календарь</a>
+            <div class="d-flex">
+                <a href="/auth/login" class="btn btn-outline-light btn-sm">Войти</a>
+            </div>
+        </div>
+    </nav>
+{{/if}}
