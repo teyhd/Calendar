@@ -90,6 +90,12 @@ export function registerHelpers(handlebarsInstance) {
         }
     });
 
+    // Хелпер для проверки вхождения ID в массив selectedIds
+    hbs.registerHelper('includesInArray', function(array, value) {
+        if (!Array.isArray(array)) return false;
+        return array.includes(parseInt(value));
+    });
+
     // === ДОПОЛНИТЕЛЬНЫЕ ХЕЛПЕРЫ ДЛЯ РАБОТЫ С ЧИСЛОВЫМИ ТИПАМИ ===
     // Хелпер для проверки роли: {{#ifRole 5}} ... {{/ifRole}}
     hbs.registerHelper('ifRole', function(roleType, options) {

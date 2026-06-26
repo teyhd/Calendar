@@ -108,12 +108,36 @@
                                         </select>
                                     </div>
                                 </div>
-                                <div class="col-md-6">
-                                    <div class="mb-3" id="audience_target_container">
+                                <div class="col-md-6" id="audience_target_container">
+                                    <!-- Выпадающий список для class, parallel, department -->
+                                    <div id="select_audience_container" style="{{#if (eq event.target_audience_type "specific_users")}}display:none;{{/if}}">
                                         <label for="target_audience_id" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Выберите аудиторию</label>
                                         <select class="form-select" id="target_audience_id" name="target_audience_id">
-                                            <option value="">Сначала выберите тип аудитории</option>
+                                            <option value="">Выберите...</option>
+                                            {{#each classes}}
+                                                <option value="{{id}}" {{#if (eq ../event.target_audience_id id)}}selected{{/if}}>{{name}}</option>
+                                            {{/each}}
                                         </select>
+                                    </div>
+                                    <!-- Блок: Конкретные пользователи (поиск + чипсы) -->
+                                    <div id="specific_users_block" style="{{#if (eq event.target_audience_type "specific_users")}}display:block;{{else}}display:none;{{/if}}">
+                                        <label class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Выберите пользователей</label>
+                                        <div class="row g-2">
+                                            <div class="col-12">
+                                                <div class="input-group">
+                                                    <input type="text" class="form-control" id="userSearchInput" placeholder="Начните вводить имя пользователя..." autocomplete="off">
+                                                    <button class="btn btn-outline-secondary" type="button" id="clearSearchBtn">✕</button>
+                                                </div>
+                                                <div id="searchResults" class="list-group mt-1" style="display: none; max-height: 200px; overflow-y: auto; position: absolute; z-index: 1000; width: 100%;"></div>
+                                            </div>
+                                            <div class="col-12">
+                                                <div id="selectedUsersContainer" class="d-flex flex-wrap gap-2 mt-2">
+                                                    <!-- Здесь будут чипсы выбранных пользователей -->
+                                                </div>
+                                                <!-- Скрытое поле для хранения ID выбранных пользователей -->
+                                                <input type="hidden" id="selectedUsersIds" name="target_audience_ids" value="">
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -185,60 +209,194 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // ---------- Данные из сервера (адаптированы под новую структуру) ----------
-        const classes = {{{json classes}}};      // массив {id, name}
-        const departments = {{{json departments}}}; // массив {id, name}
-        const users = {{{json users}}};          // массив {id, name, type}
-        const currentEvent = {{{json event}}};
-
-        // ---------- Аудитория ----------
+        // ---------- АУДИТОРИЯ: переключение типов ----------
         const typeSelect = document.getElementById('target_audience_type');
+        const selectContainer = document.getElementById('select_audience_container');
         const targetSelect = document.getElementById('target_audience_id');
+        const specificUsersBlock = document.getElementById('specific_users_block');
 
-        function updateAudienceOptions(selectedId) {
-            const type = typeSelect.value;
-            targetSelect.innerHTML = '<option value="">Выберите...</option>';
+        const classes = {{{json classes}}};
+        const departments = {{{json departments}}};
+        const allUsers = {{{json users}}};
+        const initialSelectedIds = {{{json selectedIds}}} || []; // массив ID из сервера
 
-            if (!type) {
-                targetSelect.innerHTML = '<option value="">Сначала выберите тип аудитории</option>';
-                return;
-            }
+        // ---------- ПОИСК И ЧИПСЫ ----------
+        const searchInput = document.getElementById('userSearchInput');
+        const resultsContainer = document.getElementById('searchResults');
+        const selectedContainer = document.getElementById('selectedUsersContainer');
+        const hiddenInput = document.getElementById('selectedUsersIds');
 
-            let options = [];
+        let selectedUsers = [];
 
-            if (type === 'class') {
-                options = classes.map(c => ({value: c.id, text: c.name}));
-            } else if (type === 'parallel') {
-                const parallels = [...new Set(classes.map(c => c.name.replace(/-.*$/, '')))].sort();
-                options = parallels.map(p => ({value: p, text: `${p} класс`}));
-            } else if (type === 'department') {
-                options = departments.map(d => ({value: d.id, text: d.name}));
-            } else if (type === 'specific_users') {
-                options = users.map(u => ({value: u.id, text: `${u.name} (${u.type === 1 ? 'Ученик' : 'Учитель'})`}));
-            } else if (type === 'all') {
-                targetSelect.innerHTML = '<option value="">Все пользователи системы</option>';
-                return;
-            }
-
-            options.forEach(opt => {
-                const option = document.createElement('option');
-                option.value = opt.value;
-                option.textContent = opt.text;
-                if (selectedId !== undefined && String(opt.value) === String(selectedId)) {
-                    option.selected = true;
-                }
-                targetSelect.appendChild(option);
+        // Предзаполнение из initialSelectedIds
+        if (initialSelectedIds.length > 0) {
+            initialSelectedIds.forEach(id => {
+                const user = allUsers.find(u => u.id === id);
+                if (user) selectedUsers.push(user);
             });
         }
 
-        // Инициализация: установить выбранный тип и ID
-        if (currentEvent.target_audience_type) {
-            typeSelect.value = currentEvent.target_audience_type;
-            updateAudienceOptions(currentEvent.target_audience_id);
+        function roleText(type) {
+            const roles = {1: 'Ученик', 2: 'Учитель', 5: 'Админ', 6: 'Родитель'};
+            return roles[type] || 'Неизвестно';
         }
 
-        typeSelect.addEventListener('change', function() {
-            updateAudienceOptions();
+        function searchUsers(query) {
+            if (!query.trim()) return [];
+            const q = query.toLowerCase().trim();
+            return allUsers.filter(u => u.name.toLowerCase().includes(q));
+        }
+
+        function renderResults(results) {
+            resultsContainer.innerHTML = '';
+            if (results.length === 0) {
+                resultsContainer.style.display = 'none';
+                return;
+            }
+            results.forEach(user => {
+                const item = document.createElement('a');
+                item.href = '#';
+                item.className = 'list-group-item list-group-item-action';
+                item.textContent = `${user.name} (${roleText(user.type)})`;
+                item.dataset.id = user.id;
+                item.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    addUser(user);
+                    searchInput.value = '';
+                    resultsContainer.style.display = 'none';
+                });
+                resultsContainer.appendChild(item);
+            });
+            resultsContainer.style.display = 'block';
+        }
+
+        function addUser(user) {
+            if (selectedUsers.some(u => u.id === user.id)) return;
+            selectedUsers.push(user);
+            renderChips();
+            searchInput.value = '';
+            resultsContainer.style.display = 'none';
+            updateHiddenInput();
+        }
+
+        function removeUser(userId) {
+            selectedUsers = selectedUsers.filter(u => u.id !== userId);
+            renderChips();
+            updateHiddenInput();
+        }
+
+        function renderChips() {
+            selectedContainer.innerHTML = '';
+            selectedUsers.forEach(user => {
+                const chip = document.createElement('span');
+                chip.className = 'badge bg-primary d-inline-flex align-items-center gap-1 p-2';
+                chip.style.fontSize = '0.9rem';
+                chip.innerHTML = `
+                    ${user.name}
+                    <span role="button" class="ms-1" style="cursor:pointer;" data-userid="${user.id}">&times;</span>
+                `;
+                chip.querySelector('span[data-userid]').addEventListener('click', function() {
+                    removeUser(parseInt(this.dataset.userid));
+                });
+                selectedContainer.appendChild(chip);
+            });
+        }
+
+        function updateHiddenInput() {
+            const ids = selectedUsers.map(u => u.id);
+            hiddenInput.value = ids.join(',');
+        }
+
+        // Инициализация чипсов при загрузке (если есть предзаполнение)
+        if (selectedUsers.length > 0) {
+            renderChips();
+            updateHiddenInput();
+        }
+
+        // ---------- ОБРАБОТЧИКИ ПОИСКА ----------
+        let timeoutId = null;
+        searchInput.addEventListener('input', function() {
+            const query = this.value;
+            clearTimeout(timeoutId);
+            timeoutId = setTimeout(() => {
+                const results = searchUsers(query);
+                renderResults(results);
+            }, 200);
         });
+
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('#userSearchInput') && !e.target.closest('#searchResults')) {
+                resultsContainer.style.display = 'none';
+            }
+        });
+
+        document.getElementById('clearSearchBtn').addEventListener('click', function() {
+            searchInput.value = '';
+            resultsContainer.style.display = 'none';
+            searchInput.focus();
+        });
+
+        searchInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const results = searchUsers(this.value);
+                if (results.length > 0) {
+                    addUser(results[0]);
+                    this.value = '';
+                    resultsContainer.style.display = 'none';
+                }
+            }
+        });
+
+        // ---------- УПРАВЛЕНИЕ ВИДИМОСТЬЮ БЛОКА specific_users ----------
+        function updateAudienceControls() {
+            const type = typeSelect.value;
+            if (type === 'specific_users') {
+                selectContainer.style.display = 'none';
+                specificUsersBlock.style.display = 'block';
+            } else {
+                selectContainer.style.display = 'block';
+                specificUsersBlock.style.display = 'none';
+                // Заполняем select для остальных типов
+                targetSelect.innerHTML = '<option value="">Выберите...</option>';
+                if (!type) {
+                    targetSelect.innerHTML = '<option value="">Сначала выберите тип аудитории</option>';
+                    return;
+                }
+                let options = [];
+                if (type === 'class') {
+                    options = classes.map(c => ({value: c.id, text: c.name}));
+                } else if (type === 'parallel') {
+                    const parallels = [...new Set(classes.map(c => c.name.replace(/-.*$/, '')))].sort();
+                    options = parallels.map(p => ({value: p, text: `${p} класс`}));
+                } else if (type === 'department') {
+                    options = departments.map(d => ({value: d.id, text: d.name}));
+                } else if (type === 'all') {
+                    targetSelect.innerHTML = '<option value="">Все пользователи системы</option>';
+                    return;
+                }
+                options.forEach(opt => {
+                    const option = document.createElement('option');
+                    option.value = opt.value;
+                    option.textContent = opt.text;
+                    // Если текущее значение совпадает с сохранённым – выделяем
+                    const currentValue = targetSelect.dataset.currentValue;
+                    if (currentValue && String(opt.value) === currentValue) {
+                        option.selected = true;
+                    }
+                    targetSelect.appendChild(option);
+                });
+            }
+        }
+
+        // Сохраняем текущее значение select для восстановления при переключении (если есть)
+        const currentSelectValue = targetSelect.value;
+        if (currentSelectValue) {
+            targetSelect.dataset.currentValue = currentSelectValue;
+        }
+
+        typeSelect.addEventListener('change', updateAudienceControls);
+        // Инициализация при загрузке
+        updateAudienceControls();
     });
 </script>

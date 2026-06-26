@@ -312,7 +312,7 @@ app.get('/events/create', isAuthenticated, async (req, res) => {
         const [users] = await pool.query(`
             SELECT id, name, type 
             FROM users 
-            WHERE type IN (1, 2)  -- ученики и учителя
+            WHERE type IN (1, 2, 5, 6)  
             ORDER BY name
         `);
         
@@ -334,11 +334,26 @@ app.post('/events/create', isAuthenticated, async (req, res) => {
     const {
         title, description, event_type_id, department_id, subject_id,
         start_datetime, end_datetime, location, level,
-        target_audience_type, target_audience_id, is_admin_event,
-        is_registration_enabled 
+        target_audience_type, target_audience_id, target_audience_ids,
+        is_admin_event, is_registration_enabled 
     } = req.body;
 
-    // Если пользователь не учитель и не админ, то is_admin_event = 0
+    console.log('target_audience_type:', target_audience_type);
+    console.log('target_audience_ids (raw):', target_audience_ids);
+
+    // Преобразуем target_audience_id в зависимости от типа
+    let targetAudienceId = null;
+    if (target_audience_type === 'specific_users') {
+        targetAudienceId = target_audience_ids || null;
+        // Если вдруг пришёл массив (на случай, если будем использовать чекбоксы)
+        if (Array.isArray(targetAudienceId)) {
+            targetAudienceId = targetAudienceId.filter(id => id).join(',');
+        }
+    } else {
+        targetAudienceId = target_audience_id || null;
+    }
+
+    // is_admin_event для учеников и родителей = 0
     let isAdminEvent = is_admin_event ? 1 : 0;
     if (![2, 5].includes(req.session.user.type)) {
         isAdminEvent = 0;
@@ -354,8 +369,8 @@ app.post('/events/create', isAuthenticated, async (req, res) => {
             [
                 title, description, event_type_id, department_id || null, subject_id || null,
                 start_datetime, end_datetime, location, level || 'school',
-                target_audience_type, target_audience_id || null,
-                isAdminEvent, // принудительно установлено
+                target_audience_type, targetAudienceId,
+                isAdminEvent,
                 is_registration_enabled ? 1 : 0,
                 req.session.user.id
             ]
@@ -363,7 +378,7 @@ app.post('/events/create', isAuthenticated, async (req, res) => {
         const eventId = result.insertId;
         mlog(`Мероприятие "${title}" создано пользователем ${req.session.user.name}`);
 
-        // Уведомление всем администраторам (type = 5)
+        // Уведомление администраторам
         const [admins] = await pool.query('SELECT id FROM users WHERE type = 5');
         for (const admin of admins) {
             await createNotification(
@@ -395,6 +410,7 @@ app.get('/events/edit/:id', isAuthenticated, async (req, res) => {
         }
         const event = events[0];
 
+        // Получаем справочники
         const [types] = await pool.query('SELECT * FROM event_types ORDER BY name');
         const [classes] = await pool.query('SELECT * FROM departments WHERE type = 1 ORDER BY name');
         const [departments] = await pool.query('SELECT * FROM departments WHERE type = 2 ORDER BY name');
@@ -402,9 +418,15 @@ app.get('/events/edit/:id', isAuthenticated, async (req, res) => {
         const [users] = await pool.query(`
             SELECT id, name, type 
             FROM users 
-            WHERE type IN (1, 2) 
+            WHERE type IN (1, 2, 5, 6) 
             ORDER BY name
         `);
+
+        // Подготовка выбранных ID для множественного выбора
+        let selectedIds = [];
+        if (event.target_audience_type === 'specific_users' && event.target_audience_id) {
+            selectedIds = String(event.target_audience_id).split(',').map(id => parseInt(id));
+        }
 
         res.render('events/edit', {
             title: 'Редактирование мероприятия',
@@ -413,7 +435,9 @@ app.get('/events/edit/:id', isAuthenticated, async (req, res) => {
             classes,
             departments,
             subjects: subjects || [],
-            users
+            selectedClassIds: selectedClassIds,
+            users,
+            selectedIds  // передаём в шаблон
         });
     } catch (error) {
         mlog('[ERROR]', 'Ошибка загрузки редактирования', error);
@@ -421,14 +445,13 @@ app.get('/events/edit/:id', isAuthenticated, async (req, res) => {
     }
 });
 
-// ----- Обновление мероприятия (для создателя или админа) -----
 app.post('/events/edit/:id', isAuthenticated, async (req, res) => {
     const eventId = req.params.id;
     const {
         title, description, event_type_id, department_id, subject_id,
         start_datetime, end_datetime, location, level,
-        target_audience_type, target_audience_id, is_admin_event,
-        is_registration_enabled 
+        target_audience_type, target_audience_id, target_audience_ids,
+        is_admin_event, is_registration_enabled 
     } = req.body;
 
     try {
@@ -439,6 +462,17 @@ app.post('/events/edit/:id', isAuthenticated, async (req, res) => {
         );
         if (check.length === 0) {
             return res.status(403).send('Доступ запрещён');
+        }
+
+        // Преобразуем target_audience_id в зависимости от типа
+        let targetAudienceId = null;
+        if (target_audience_type === 'specific_users') {
+            targetAudienceId = target_audience_ids || null;
+            if (Array.isArray(targetAudienceId)) {
+                targetAudienceId = targetAudienceId.filter(id => id).join(',');
+            }
+        } else {
+            targetAudienceId = target_audience_id || null;
         }
 
         // Принудительно сбрасываем is_admin_event для учеников и родителей
@@ -457,7 +491,7 @@ app.post('/events/edit/:id', isAuthenticated, async (req, res) => {
             [
                 title, description, event_type_id, department_id || null, subject_id || null,
                 start_datetime, end_datetime, location, level || 'school',
-                target_audience_type, target_audience_id || null,
+                target_audience_type, targetAudienceId,
                 isAdminEvent,
                 is_registration_enabled ? 1 : 0,
                 eventId
@@ -723,32 +757,30 @@ app.get('/api/events', isAuthenticated, async (req, res) => {
             params.push(user.id);
 
             if (user.type === 1) { // Ученик
-                // У ученика есть kaf – это id его класса
                 visibilityCondition += `
                     OR (
                         e.status = 'approved'
                         AND (
                             e.target_audience_type = 'all'
                             OR (e.target_audience_type = 'class' AND e.target_audience_id = ?)
-                            OR (e.target_audience_type = 'specific_users' AND e.target_audience_id = ?)
+                            OR (e.target_audience_type = 'specific_users' AND FIND_IN_SET(?, e.target_audience_id))
                         )
                     )
                 `;
                 params.push(user.kaf, user.id);
-            } else if (user.type === 6) { // Родитель – временно показываем все утверждённые
-                // Родитель видит все утверждённые мероприятия, но позже можно добавить фильтр по детям
+            } else if (user.type === 6) { // Родитель
+                // Родитель видит все утверждённые мероприятия (можно добавить фильтр по детям позже)
                 visibilityCondition += `
                     OR (e.status = 'approved')
                 `;
             } else if (user.type === 2) { // Учитель
-                // У учителя kaf – это id его кафедры
                 visibilityCondition += `
                     OR (
                         e.status = 'approved'
                         AND (
                             e.target_audience_type = 'all'
                             OR (e.target_audience_type = 'department' AND e.target_audience_id = ?)
-                            OR (e.target_audience_type = 'specific_users' AND e.target_audience_id = ?)
+                            OR (e.target_audience_type = 'specific_users' AND FIND_IN_SET(?, e.target_audience_id))
                         )
                     )
                 `;

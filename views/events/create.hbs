@@ -1,5 +1,5 @@
 <h1 class="mb-4" style="font-size: 1.8rem; font-weight: 700; color: var(--dark-gray, #172033);">
-    ➕ Создание мероприятия
+     Создание мероприятия
 </h1>
 
 <div class="row g-4">
@@ -101,6 +101,7 @@
                                         <label for="target_audience_type" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Тип аудитории *</label>
                                         <select class="form-select" id="target_audience_type" name="target_audience_type" required>
                                             <option value="class">📚 Конкретный класс</option>
+                                            <option value="multiple_classes">📚 Несколько классов</option>
                                             <option value="parallel">📖 Целая параллель</option>
                                             <option value="department">🏛️ Кафедра</option>
                                             <option value="specific_users">👤 Конкретные пользователи</option>
@@ -108,12 +109,52 @@
                                         </select>
                                     </div>
                                 </div>
-                                <div class="col-md-6">
-                                    <div class="mb-3" id="audience_target_container">
+                                <div class="col-md-6" id="audience_target_container">
+                                    <!-- Выпадающий список для class, parallel, department -->
+                                    <div id="select_audience_container">
                                         <label for="target_audience_id" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Выберите аудиторию</label>
                                         <select class="form-select" id="target_audience_id" name="target_audience_id">
                                             <option value="">Сначала выберите тип аудитории</option>
                                         </select>
+                                    </div>
+                                    <!-- Блок: Конкретные пользователи (поиск + чипсы) -->
+                                    <div id="specific_users_block" style="{{#if (eq event.target_audience_type "specific_users")}}display:block;{{else}}display:none;{{/if}}">
+                                        <label class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Выберите пользователей</label>
+                                        <div class="row g-2">
+                                            <div class="col-12">
+                                                <div class="input-group">
+                                                    <input type="text" class="form-control" id="userSearchInput" placeholder="Начните вводить имя пользователя..." autocomplete="off">
+                                                    <button class="btn btn-outline-secondary" type="button" id="clearSearchBtn">✕</button>
+                                                </div>
+                                                <div id="searchResults" class="list-group mt-1" style="display: none; max-height: 200px; overflow-y: auto; position: absolute; z-index: 1000; width: 100%;"></div>
+                                            </div>
+                                            <div class="col-12">
+                                                <div id="selectedUsersContainer" class="d-flex flex-wrap gap-2 mt-2">
+                                                    <!-- Здесь будут чипсы выбранных пользователей -->
+                                                </div>
+                                                <!-- Скрытое поле для хранения ID выбранных пользователей -->
+                                                <input type="hidden" id="selectedUsersIds" name="target_audience_ids" value="">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <!-- Блок: Несколько классов (поиск + чипсы) -->
+                                    <div id="multiple_classes_block" style="display: none;">
+                                        <label class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Выберите классы</label>
+                                        <div class="row g-2">
+                                            <div class="col-12">
+                                                <div class="input-group">
+                                                    <input type="text" class="form-control" id="classSearchInput" placeholder="Начните вводить название класса..." autocomplete="off">
+                                                    <button class="btn btn-outline-secondary" type="button" id="clearClassSearchBtn">✕</button>
+                                                </div>
+                                                <div id="classSearchResults" class="list-group mt-1" style="display: none; max-height: 200px; overflow-y: auto; position: absolute; z-index: 1000; width: 100%;"></div>
+                                            </div>
+                                            <div class="col-12">
+                                                <div id="selectedClassesContainer" class="d-flex flex-wrap gap-2 mt-2">
+                                                    <!-- Чипсы выбранных классов -->
+                                                </div>
+                                                <input type="hidden" id="selectedClassesIds" name="target_audience_ids" value="">
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -245,42 +286,270 @@
     </div>
 </div>
 
+
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const typeSelect = document.getElementById('target_audience_type');
-        const targetSelect = document.getElementById('target_audience_id');
-        
-        // Данные из сервера (адаптированы под новую структуру)
-        const classes = {{{json classes}}};      // массив {id, name}
-        const departments = {{{json departments}}}; // массив {id, name}
-        const users = {{{json users}}};          // массив {id, name, type}
-        
-        function updateAudienceOptions() {
-            const type = typeSelect.value;
+document.addEventListener('DOMContentLoaded', function() {
+    // ---------- Данные ----------
+    const typeSelect = document.getElementById('target_audience_type');
+    const selectContainer = document.getElementById('select_audience_container');
+    const targetSelect = document.getElementById('target_audience_id');
+    const specificUsersBlock = document.getElementById('specific_users_block');
+    const multipleClassesBlock = document.getElementById('multiple_classes_block');
+
+    const allClasses = {{{json classes}}}; // массив {id, name}
+    const allUsers = {{{json users}}};     // массив {id, name, type}
+
+    // ========== ЧИПСЫ ДЛЯ КЛАССОВ ==========
+    const classSearchInput = document.getElementById('classSearchInput');
+    const classResults = document.getElementById('classSearchResults');
+    const selectedClassesContainer = document.getElementById('selectedClassesContainer');
+    const selectedClassesHidden = document.getElementById('selectedClassesIds');
+
+    let selectedClasses = [];
+
+    function searchClasses(query) {
+        if (!query.trim()) return [];
+        const q = query.toLowerCase().trim();
+        return allClasses.filter(c => c.name.toLowerCase().includes(q));
+    }
+
+    function renderClassResults(results) {
+        classResults.innerHTML = '';
+        if (results.length === 0) {
+            classResults.style.display = 'none';
+            return;
+        }
+        results.forEach(cls => {
+            const item = document.createElement('a');
+            item.href = '#';
+            item.className = 'list-group-item list-group-item-action';
+            item.textContent = cls.name;
+            item.dataset.id = cls.id;
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                addClass(cls);
+                classSearchInput.value = '';
+                classResults.style.display = 'none';
+            });
+            classResults.appendChild(item);
+        });
+        classResults.style.display = 'block';
+    }
+
+    function addClass(cls) {
+        if (selectedClasses.some(c => c.id === cls.id)) return;
+        selectedClasses.push(cls);
+        renderClassChips();
+        classSearchInput.value = '';
+        classResults.style.display = 'none';
+        updateClassHiddenInput();
+    }
+
+    function removeClass(clsId) {
+        selectedClasses = selectedClasses.filter(c => c.id !== clsId);
+        renderClassChips();
+        updateClassHiddenInput();
+    }
+
+    function renderClassChips() {
+        selectedClassesContainer.innerHTML = '';
+        selectedClasses.forEach(cls => {
+            const chip = document.createElement('span');
+            chip.className = 'badge bg-success d-inline-flex align-items-center gap-1 p-2';
+            chip.style.fontSize = '0.9rem';
+            chip.innerHTML = `
+                ${cls.name}
+                <span role="button" class="ms-1" style="cursor:pointer;" data-classid="${cls.id}">&times;</span>
+            `;
+            chip.querySelector('span[data-classid]').addEventListener('click', function() {
+                removeClass(parseInt(this.dataset.classid));
+            });
+            selectedClassesContainer.appendChild(chip);
+        });
+    }
+
+    function updateClassHiddenInput() {
+        const ids = selectedClasses.map(c => c.id);
+        selectedClassesHidden.value = ids.join(',');
+        console.log('Классы сохранены:', selectedClassesHidden.value);
+    }
+
+    // Поиск классов
+    let classTimeout = null;
+    classSearchInput.addEventListener('input', function() {
+        clearTimeout(classTimeout);
+        classTimeout = setTimeout(() => {
+            const results = searchClasses(this.value);
+            renderClassResults(results);
+        }, 200);
+    });
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('#classSearchInput') && !e.target.closest('#classSearchResults')) {
+            classResults.style.display = 'none';
+        }
+    });
+    document.getElementById('clearClassSearchBtn').addEventListener('click', function() {
+        classSearchInput.value = '';
+        classResults.style.display = 'none';
+        classSearchInput.focus();
+    });
+    classSearchInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const results = searchClasses(this.value);
+            if (results.length > 0) {
+                addClass(results[0]);
+                this.value = '';
+                classResults.style.display = 'none';
+            }
+        }
+    });
+
+    // ========== ЧИПСЫ ДЛЯ ПОЛЬЗОВАТЕЛЕЙ ==========
+    // (оставляем ваш существующий код, только переименуйте переменные, чтобы не было конфликтов)
+    // У вас уже есть searchInput, resultsContainer, selectedContainer, hiddenInput, selectedUsers
+    // Я их переименую для ясности:
+    const userSearchInput = document.getElementById('userSearchInput');
+    const userResults = document.getElementById('searchResults');
+    const selectedUsersContainer = document.getElementById('selectedUsersContainer');
+    const selectedUsersHidden = document.getElementById('selectedUsersIds');
+    let selectedUsers = [];
+
+    function searchUsers(query) {
+        if (!query.trim()) return [];
+        const q = query.toLowerCase().trim();
+        return allUsers.filter(u => u.name.toLowerCase().includes(q));
+    }
+
+    function renderUserResults(results) {
+        userResults.innerHTML = '';
+        if (results.length === 0) {
+            userResults.style.display = 'none';
+            return;
+        }
+        results.forEach(user => {
+            const item = document.createElement('a');
+            item.href = '#';
+            item.className = 'list-group-item list-group-item-action';
+            item.textContent = `${user.name} (${roleText(user.type)})`;
+            item.dataset.id = user.id;
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                addUser(user);
+                userSearchInput.value = '';
+                userResults.style.display = 'none';
+            });
+            userResults.appendChild(item);
+        });
+        userResults.style.display = 'block';
+    }
+
+    function addUser(user) {
+        if (selectedUsers.some(u => u.id === user.id)) return;
+        selectedUsers.push(user);
+        renderUserChips();
+        userSearchInput.value = '';
+        userResults.style.display = 'none';
+        updateUserHiddenInput();
+    }
+
+    function removeUser(userId) {
+        selectedUsers = selectedUsers.filter(u => u.id !== userId);
+        renderUserChips();
+        updateUserHiddenInput();
+    }
+
+    function renderUserChips() {
+        selectedUsersContainer.innerHTML = '';
+        selectedUsers.forEach(user => {
+            const chip = document.createElement('span');
+            chip.className = 'badge bg-primary d-inline-flex align-items-center gap-1 p-2';
+            chip.style.fontSize = '0.9rem';
+            chip.innerHTML = `
+                ${user.name}
+                <span role="button" class="ms-1" style="cursor:pointer;" data-userid="${user.id}">&times;</span>
+            `;
+            chip.querySelector('span[data-userid]').addEventListener('click', function() {
+                removeUser(parseInt(this.dataset.userid));
+            });
+            selectedUsersContainer.appendChild(chip);
+        });
+    }
+
+    function updateUserHiddenInput() {
+        const ids = selectedUsers.map(u => u.id);
+        selectedUsersHidden.value = ids.join(',');
+        console.log('Пользователи сохранены:', selectedUsersHidden.value);
+    }
+
+    function roleText(type) {
+        const roles = {1: 'Ученик', 2: 'Учитель', 5: 'Админ', 6: 'Родитель'};
+        return roles[type] || 'Неизвестно';
+    }
+
+    // Поиск пользователей
+    let userTimeout = null;
+    userSearchInput.addEventListener('input', function() {
+        clearTimeout(userTimeout);
+        userTimeout = setTimeout(() => {
+            const results = searchUsers(this.value);
+            renderUserResults(results);
+        }, 200);
+    });
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('#userSearchInput') && !e.target.closest('#searchResults')) {
+            userResults.style.display = 'none';
+        }
+    });
+    document.getElementById('clearSearchBtn').addEventListener('click', function() {
+        userSearchInput.value = '';
+        userResults.style.display = 'none';
+        userSearchInput.focus();
+    });
+    userSearchInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const results = searchUsers(this.value);
+            if (results.length > 0) {
+                addUser(results[0]);
+                this.value = '';
+                userResults.style.display = 'none';
+            }
+        }
+    });
+
+    // ========== УПРАВЛЕНИЕ ВИДИМОСТЬЮ ==========
+    function updateAudienceControls() {
+        const type = typeSelect.value;
+        // Скрываем все блоки
+        selectContainer.style.display = 'none';
+        specificUsersBlock.style.display = 'none';
+        multipleClassesBlock.style.display = 'none';
+
+        if (type === 'specific_users') {
+            specificUsersBlock.style.display = 'block';
+        } else if (type === 'multiple_classes') {
+            multipleClassesBlock.style.display = 'block';
+        } else {
+            selectContainer.style.display = 'block';
+            // Заполняем select для остальных типов
             targetSelect.innerHTML = '<option value="">Выберите...</option>';
-            
             if (!type) {
                 targetSelect.innerHTML = '<option value="">Сначала выберите тип аудитории</option>';
                 return;
             }
-            
             let options = [];
-            
             if (type === 'class') {
-                options = classes.map(c => ({value: c.id, text: c.name}));
+                options = allClasses.map(c => ({value: c.id, text: c.name}));
             } else if (type === 'parallel') {
-                // Для параллелей извлекаем номера классов (например, из названий "5-1" → "5")
-                const parallels = [...new Set(classes.map(c => c.name.replace(/-.*$/, '')))].sort();
+                const parallels = [...new Set(allClasses.map(c => c.name.replace(/-.*$/, '')))].sort();
                 options = parallels.map(p => ({value: p, text: `${p} класс`}));
             } else if (type === 'department') {
                 options = departments.map(d => ({value: d.id, text: d.name}));
-            } else if (type === 'specific_users') {
-                options = users.map(u => ({value: u.id, text: `${u.name} (${u.type === 1 ? 'Ученик' : 'Учитель'})`}));
             } else if (type === 'all') {
                 targetSelect.innerHTML = '<option value="">Все пользователи системы</option>';
                 return;
             }
-            
             options.forEach(opt => {
                 const option = document.createElement('option');
                 option.value = opt.value;
@@ -288,17 +557,18 @@
                 targetSelect.appendChild(option);
             });
         }
-        
-        typeSelect.addEventListener('change', updateAudienceOptions);
-        updateAudienceOptions();
-        
-        // === Награды: логика показа ===
+    }
+
+    typeSelect.addEventListener('change', updateAudienceControls);
+    updateAudienceControls();
+
+        // ---------- НАГРАДЫ (логика показа) ----------
         const enableCheckbox = document.getElementById('enable_rewards');
         const rewardsBlock = document.getElementById('rewards_block');
         const rewardTypeSelect = document.getElementById('reward_type');
         const placesBlock = document.getElementById('places_block');
         const rewardDescription = document.getElementById('reward_description');
-        
+
         function updateRewardsUI() {
             if (enableCheckbox.checked) {
                 rewardsBlock.style.display = 'block';
@@ -307,11 +577,10 @@
                 rewardsBlock.style.display = 'none';
             }
         }
-        
+
         function updateRewardDescription() {
             const type = rewardTypeSelect.value;
             const places = document.getElementById('places_count').value;
-            
             if (type === 'educational') {
                 rewardDescription.textContent = '📖 Учебное: все участники получат по 10 очков';
                 placesBlock.style.display = 'none';
@@ -320,11 +589,11 @@
                 placesBlock.style.display = 'block';
             }
         }
-        
+
         enableCheckbox.addEventListener('change', updateRewardsUI);
         rewardTypeSelect.addEventListener('change', updateRewardDescription);
         document.getElementById('places_count').addEventListener('change', updateRewardDescription);
-        
+
         updateRewardsUI();
         updateRewardDescription();
     });
