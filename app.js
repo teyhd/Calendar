@@ -139,7 +139,6 @@ app.get('/auth/login', (req, res) => {
 app.post('/auth/login', async (req, res) => {
     const { name, pin } = req.body;
     try {
-        // Ищем пользователя по имени (ФИО) и PIN-коду
         const [rows] = await pool.query(
             `SELECT u.*, r.name as role_name 
              FROM users u 
@@ -151,19 +150,33 @@ app.post('/auth/login', async (req, res) => {
             return res.render('auth/login', { error: 'Неверное имя или PIN-код' });
         }
         const user = rows[0];
+        
+        // Получаем название кафедры/класса
+        let kaf_name = null;
+        if (user.kaf) {
+            const [kafRows] = await pool.query(
+                'SELECT name FROM departments WHERE id = ?',
+                [user.kaf]
+            );
+            if (kafRows.length > 0) {
+                kaf_name = kafRows[0].name;
+            }
+        }
+
         // Сохраняем в сессию
         req.session.user = {
             id: user.id,
             name: user.name,
             kaf: user.kaf,
+            kaf_name: kaf_name,      // ← добавлено
             type: user.type,
             role_name: user.role_name
         };
         mlog(`Пользователь ${user.name} вошел в систему`);
         res.redirect('/');
     } catch (error) {
-        mlog('[ERROR]', 'Ошибка входа', error);
-        res.render('auth/login', { error: 'Ошибка сервера' });
+        mlog('[ERROR]', 'Ошибка входа', error.message || error);
+        res.render('auth/login', { error: 'Ошибка сервера. Попробуйте позже.' });
     }
 });
 
@@ -289,7 +302,7 @@ app.get('/api/admin/users', isAdmin, async (req, res) => {
 // ===== УПРАВЛЕНИЕ МЕРОПРИЯТИЯМИ =====
 // ============================================================
 
-app.get('/events/create', isTeacher, async (req, res) => {
+app.get('/events/create', isAuthenticated, async (req, res) => {
     try {
         const [types] = await pool.query('SELECT * FROM event_types ORDER BY name');
         const [classes] = await pool.query('SELECT * FROM departments WHERE type = 1 ORDER BY name');
@@ -317,13 +330,19 @@ app.get('/events/create', isTeacher, async (req, res) => {
     }
 });
 
-app.post('/events/create', isTeacher, async (req, res) => {
+app.post('/events/create', isAuthenticated, async (req, res) => {
     const {
         title, description, event_type_id, department_id, subject_id,
         start_datetime, end_datetime, location, level,
         target_audience_type, target_audience_id, is_admin_event,
         is_registration_enabled 
     } = req.body;
+
+    // Если пользователь не учитель и не админ, то is_admin_event = 0
+    let isAdminEvent = is_admin_event ? 1 : 0;
+    if (![2, 5].includes(req.session.user.type)) {
+        isAdminEvent = 0;
+    }
 
     try {
         const [result] = await pool.query(
@@ -336,7 +355,7 @@ app.post('/events/create', isTeacher, async (req, res) => {
                 title, description, event_type_id, department_id || null, subject_id || null,
                 start_datetime, end_datetime, location, level || 'school',
                 target_audience_type, target_audience_id || null,
-                is_admin_event ? 1 : 0,
+                isAdminEvent, // принудительно установлено
                 is_registration_enabled ? 1 : 0,
                 req.session.user.id
             ]
@@ -363,7 +382,7 @@ app.post('/events/create', isTeacher, async (req, res) => {
 });
 
 // ----- Редактирование мероприятия (страница) -----
-app.get('/events/edit/:id', isTeacher, async (req, res) => {
+app.get('/events/edit/:id', isAuthenticated, async (req, res) => {
     const eventId = req.params.id;
     try {
         // Проверяем доступ (создатель или админ)
@@ -402,8 +421,8 @@ app.get('/events/edit/:id', isTeacher, async (req, res) => {
     }
 });
 
-// ----- Обновление мероприятия -----
-app.post('/events/edit/:id', isTeacher, async (req, res) => {
+// ----- Обновление мероприятия (для создателя или админа) -----
+app.post('/events/edit/:id', isAuthenticated, async (req, res) => {
     const eventId = req.params.id;
     const {
         title, description, event_type_id, department_id, subject_id,
@@ -413,13 +432,19 @@ app.post('/events/edit/:id', isTeacher, async (req, res) => {
     } = req.body;
 
     try {
-        // Проверяем доступ
+        // Проверяем доступ: создатель или админ (type=5)
         const [check] = await pool.query(
             `SELECT created_by FROM events WHERE id = ? AND (created_by = ? OR ? = 5)`,
             [eventId, req.session.user.id, req.session.user.type]
         );
         if (check.length === 0) {
             return res.status(403).send('Доступ запрещён');
+        }
+
+        // Принудительно сбрасываем is_admin_event для учеников и родителей
+        let isAdminEvent = is_admin_event ? 1 : 0;
+        if (![2, 5].includes(req.session.user.type)) {
+            isAdminEvent = 0;
         }
 
         await pool.query(
@@ -433,7 +458,7 @@ app.post('/events/edit/:id', isTeacher, async (req, res) => {
                 title, description, event_type_id, department_id || null, subject_id || null,
                 start_datetime, end_datetime, location, level || 'school',
                 target_audience_type, target_audience_id || null,
-                is_admin_event ? 1 : 0,
+                isAdminEvent,
                 is_registration_enabled ? 1 : 0,
                 eventId
             ]
@@ -466,9 +491,9 @@ app.get('/my-events', isAuthenticated, async (req, res) => {
         let events = [];
         let title = 'Мои мероприятия';
 
-        if (userType === 1) { // Ученик
+        if (userType === 1) { // Ученик – видит свои созданные и те, на которые записан
             [events] = await pool.query(`
-                SELECT e.*, u.name as creator_name, et.name as type_name,
+                SELECT DISTINCT e.*, u.name as creator_name, et.name as type_name,
                        e.is_registration_enabled,
                        CASE 
                            WHEN e.end_datetime < NOW() THEN 'Завершено'
@@ -477,26 +502,27 @@ app.get('/my-events', isAuthenticated, async (req, res) => {
                 FROM events e
                 LEFT JOIN users u ON e.created_by = u.id
                 LEFT JOIN event_types et ON e.event_type_id = et.id
-                INNER JOIN event_participants ep ON e.id = ep.event_id
-                WHERE ep.user_id = ?
+                LEFT JOIN event_participants ep ON e.id = ep.event_id AND ep.user_id = ?
+                WHERE e.created_by = ? OR ep.user_id = ?
                 ORDER BY e.start_datetime DESC
-            `, [userId]);
+            `, [userId, userId, userId]);
             title = 'Мои мероприятия';
 
-        } else if (userType === 6) { // Родитель
-            // Родитель видит мероприятия своих детей (связь через parent_student)
-            // В новой структуре пока нет таблицы parent_student, поэтому пока закомментируем
-            // Для теста можно показать все мероприятия, где участвуют ученики
+        } else if (userType === 6) { // Родитель – видит свои созданные и мероприятия детей
             [events] = await pool.query(`
-                SELECT e.*, u.name as creator_name, et.name as type_name,
-                       e.is_registration_enabled
+                SELECT DISTINCT e.*, u.name as creator_name, et.name as type_name,
+                       e.is_registration_enabled,
+                       s.name as student_name
                 FROM events e
                 LEFT JOIN users u ON e.created_by = u.id
                 LEFT JOIN event_types et ON e.event_type_id = et.id
-                WHERE e.status = 'approved'
+                LEFT JOIN event_participants ep ON e.id = ep.event_id
+                LEFT JOIN users s ON ep.user_id = s.id
+                WHERE e.created_by = ? 
+                   OR ep.user_id IN (SELECT student_id FROM parent_student WHERE parent_id = ?)
                 ORDER BY e.start_datetime DESC
-            `);
-            title = 'Мероприятия (для родителей)';
+            `, [userId, userId]);
+            title = 'Мероприятия моих детей';
 
         } else if (userType === 2 || userType === 5) { // Учитель или Админ
             [events] = await pool.query(`
@@ -598,21 +624,21 @@ app.get('/events/archive', isAuthenticated, async (req, res) => {
 
         if (userType === 1) { // Ученик
             [events] = await pool.query(`
-                SELECT e.*, u.name as creator_name, et.name as type_name,
-                       e.is_registration_enabled,
-                       CASE 
-                           WHEN e.status = 'completed' THEN 'Участвовал'
-                           WHEN e.status = 'canceled' THEN 'Отменено'
-                       END as participation_status
+                SELECT DISTINCT e.*, u.name as creator_name, et.name as type_name,
+                        e.is_registration_enabled,
+                        CASE 
+                            WHEN e.status = 'completed' THEN 'Участвовал'
+                            WHEN e.status = 'canceled' THEN 'Отменено'
+                        END as participation_status
                 FROM events e
                 LEFT JOIN users u ON e.created_by = u.id
                 LEFT JOIN event_types et ON e.event_type_id = et.id
-                INNER JOIN event_participants ep ON e.id = ep.event_id
-                WHERE ep.user_id = ?
+                LEFT JOIN event_participants ep ON e.id = ep.event_id AND ep.user_id = ?
+                WHERE (e.created_by = ? OR ep.user_id = ?)
                   AND e.end_datetime < NOW()
                   AND e.status IN ('completed', 'canceled')
                 ORDER BY e.end_datetime DESC
-            `, [userId]);
+            `, [userId, userId, userId]);
 
         } else if (userType === 6) { // Родитель – пока без parent_student, просто покажем все завершённые
             [events] = await pool.query(`

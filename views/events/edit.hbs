@@ -140,12 +140,14 @@
                     </div>
 
                     <!-- Для администратора -->
+                    {{#if (or (eq user.type 2) (eq user.type 5))}}
                     <div class="mb-3 form-check">
                         <input type="checkbox" class="form-check-input" id="is_admin_event" name="is_admin_event" value="1" {{#if event.is_admin_event}}checked{{/if}}>
                         <label class="form-check-label" for="is_admin_event">
                             🔒 Только для администраторов (не видно ученикам и родителям)
                         </label>
                     </div>
+                    {{/if}}
                     
                     <div class="d-flex gap-2 mt-4">
                         <button type="submit" class="btn btn-primary px-4 fw-semibold">✅ Сохранить изменения</button>
