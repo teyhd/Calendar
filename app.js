@@ -343,9 +343,8 @@ app.post('/events/create', isAuthenticated, async (req, res) => {
 
     // Преобразуем target_audience_id в зависимости от типа
     let targetAudienceId = null;
-    if (target_audience_type === 'specific_users') {
+    if (target_audience_type === 'specific_users' || target_audience_type === 'multiple_classes') {
         targetAudienceId = target_audience_ids || null;
-        // Если вдруг пришёл массив (на случай, если будем использовать чекбоксы)
         if (Array.isArray(targetAudienceId)) {
             targetAudienceId = targetAudienceId.filter(id => id).join(',');
         }
@@ -422,10 +421,16 @@ app.get('/events/edit/:id', isAuthenticated, async (req, res) => {
             ORDER BY name
         `);
 
-        // Подготовка выбранных ID для множественного выбора
+        // Подготовка выбранных ID для множественного выбора (пользователи)
         let selectedIds = [];
         if (event.target_audience_type === 'specific_users' && event.target_audience_id) {
             selectedIds = String(event.target_audience_id).split(',').map(id => parseInt(id));
+        }
+
+        // Подготовка выбранных ID для множественного выбора (классы)
+        let selectedClassIds = [];
+        if (event.target_audience_type === 'multiple_classes' && event.target_audience_id) {
+            selectedClassIds = String(event.target_audience_id).split(',').map(id => parseInt(id));
         }
 
         res.render('events/edit', {
@@ -435,16 +440,15 @@ app.get('/events/edit/:id', isAuthenticated, async (req, res) => {
             classes,
             departments,
             subjects: subjects || [],
-            selectedClassIds: selectedClassIds,
             users,
-            selectedIds  // передаём в шаблон
+            selectedIds,          // для пользователей
+            selectedClassIds      // для классов
         });
     } catch (error) {
         mlog('[ERROR]', 'Ошибка загрузки редактирования', error);
         res.status(500).send('Ошибка сервера');
     }
 });
-
 app.post('/events/edit/:id', isAuthenticated, async (req, res) => {
     const eventId = req.params.id;
     const {
@@ -466,7 +470,8 @@ app.post('/events/edit/:id', isAuthenticated, async (req, res) => {
 
         // Преобразуем target_audience_id в зависимости от типа
         let targetAudienceId = null;
-        if (target_audience_type === 'specific_users') {
+        if (target_audience_type === 'specific_users' || target_audience_type === 'multiple_classes') {
+            // Для multiple_classes и specific_users используем поле target_audience_ids
             targetAudienceId = target_audience_ids || null;
             if (Array.isArray(targetAudienceId)) {
                 targetAudienceId = targetAudienceId.filter(id => id).join(',');
@@ -763,11 +768,12 @@ app.get('/api/events', isAuthenticated, async (req, res) => {
                         AND (
                             e.target_audience_type = 'all'
                             OR (e.target_audience_type = 'class' AND e.target_audience_id = ?)
+                            OR (e.target_audience_type = 'multiple_classes' AND FIND_IN_SET(?, e.target_audience_id))
                             OR (e.target_audience_type = 'specific_users' AND FIND_IN_SET(?, e.target_audience_id))
                         )
                     )
                 `;
-                params.push(user.kaf, user.id);
+                params.push(user.kaf, user.kaf, user.id);
             } else if (user.type === 6) { // Родитель
                 // Родитель видит все утверждённые мероприятия (можно добавить фильтр по детям позже)
                 visibilityCondition += `
@@ -780,11 +786,12 @@ app.get('/api/events', isAuthenticated, async (req, res) => {
                         AND (
                             e.target_audience_type = 'all'
                             OR (e.target_audience_type = 'department' AND e.target_audience_id = ?)
+                            OR (e.target_audience_type = 'multiple_classes' AND FIND_IN_SET(?, e.target_audience_id))
                             OR (e.target_audience_type = 'specific_users' AND FIND_IN_SET(?, e.target_audience_id))
                         )
                     )
                 `;
-                params.push(user.kaf, user.id);
+                params.push(user.kaf, user.kaf, user.id);
             }
         }
 

@@ -101,6 +101,7 @@
                                         <label for="target_audience_type" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Тип аудитории *</label>
                                         <select class="form-select" id="target_audience_type" name="target_audience_type" required>
                                             <option value="class" {{#if (eq event.target_audience_type "class")}}selected{{/if}}>📚 Конкретный класс</option>
+                                            <option value="multiple_classes" {{#if (eq event.target_audience_type "multiple_classes")}}selected{{/if}}>📚 Несколько классов</option>
                                             <option value="parallel" {{#if (eq event.target_audience_type "parallel")}}selected{{/if}}>📖 Целая параллель</option>
                                             <option value="department" {{#if (eq event.target_audience_type "department")}}selected{{/if}}>🏛️ Кафедра</option>
                                             <option value="specific_users" {{#if (eq event.target_audience_type "specific_users")}}selected{{/if}}>👤 Конкретные пользователи</option>
@@ -110,7 +111,7 @@
                                 </div>
                                 <div class="col-md-6" id="audience_target_container">
                                     <!-- Выпадающий список для class, parallel, department -->
-                                    <div id="select_audience_container" style="{{#if (eq event.target_audience_type "specific_users")}}display:none;{{/if}}">
+                                    <div id="select_audience_container" style="{{#if (or (eq event.target_audience_type "specific_users") (eq event.target_audience_type "multiple_classes"))}}display:none;{{/if}}">
                                         <label for="target_audience_id" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Выберите аудиторию</label>
                                         <select class="form-select" id="target_audience_id" name="target_audience_id">
                                             <option value="">Выберите...</option>
@@ -134,8 +135,26 @@
                                                 <div id="selectedUsersContainer" class="d-flex flex-wrap gap-2 mt-2">
                                                     <!-- Здесь будут чипсы выбранных пользователей -->
                                                 </div>
-                                                <!-- Скрытое поле для хранения ID выбранных пользователей -->
                                                 <input type="hidden" id="selectedUsersIds" name="target_audience_ids" value="">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <!-- Блок: Несколько классов (поиск + чипсы) -->
+                                    <div id="multiple_classes_block" style="{{#if (eq event.target_audience_type "multiple_classes")}}display:block;{{else}}display:none;{{/if}}">
+                                        <label class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Выберите классы</label>
+                                        <div class="row g-2">
+                                            <div class="col-12">
+                                                <div class="input-group">
+                                                    <input type="text" class="form-control" id="classSearchInput" placeholder="Начните вводить название класса..." autocomplete="off">
+                                                    <button class="btn btn-outline-secondary" type="button" id="clearClassSearchBtn">✕</button>
+                                                </div>
+                                                <div id="classSearchResults" class="list-group mt-1" style="display: none; max-height: 200px; overflow-y: auto; position: absolute; z-index: 1000; width: 100%;"></div>
+                                            </div>
+                                            <div class="col-12">
+                                                <div id="selectedClassesContainer" class="d-flex flex-wrap gap-2 mt-2">
+                                                    <!-- Чипсы выбранных классов -->
+                                                </div>
+                                                <input type="hidden" id="selectedClassesIds" name="target_audience_ids" value="">
                                             </div>
                                         </div>
                                     </div>
@@ -192,6 +211,7 @@
                 <p><strong>Кто увидит мероприятие?</strong></p>
                 <ul class="small">
                     <li><strong>📚 Класс</strong> — выберите конкретный класс (например, 5А)</li>
+                    <li><strong>📚 Несколько классов</strong> — выберите несколько классов (поиск + чипсы)</li>
                     <li><strong>📖 Параллель</strong> — выберите номер параллели (например, 5 класс)</li>
                     <li><strong>🏛️ Кафедра</strong> — выберите кафедру (например, Математика)</li>
                     <li><strong>👤 Пользователи</strong> — выберите конкретного пользователя</li>
@@ -214,31 +234,146 @@
         const selectContainer = document.getElementById('select_audience_container');
         const targetSelect = document.getElementById('target_audience_id');
         const specificUsersBlock = document.getElementById('specific_users_block');
+        const multipleClassesBlock = document.getElementById('multiple_classes_block');
 
-        const classes = {{{json classes}}};
+        const allClasses = {{{json classes}}};
         const departments = {{{json departments}}};
         const allUsers = {{{json users}}};
-        const initialSelectedIds = {{{json selectedIds}}} || []; // массив ID из сервера
+        const initialSelectedIds = {{{json selectedIds}}} || []; // ID пользователей
+        const initialClassIds = {{{json selectedClassIds}}} || []; // ID классов
 
-        // ---------- ПОИСК И ЧИПСЫ ----------
-        const searchInput = document.getElementById('userSearchInput');
-        const resultsContainer = document.getElementById('searchResults');
-        const selectedContainer = document.getElementById('selectedUsersContainer');
-        const hiddenInput = document.getElementById('selectedUsersIds');
+        // ========== ЧИПСЫ ДЛЯ КЛАССОВ ==========
+        const classSearchInput = document.getElementById('classSearchInput');
+        const classResults = document.getElementById('classSearchResults');
+        const selectedClassesContainer = document.getElementById('selectedClassesContainer');
+        const selectedClassesHidden = document.getElementById('selectedClassesIds');
 
+        let selectedClasses = [];
+
+        // Предзаполнение классов
+        if (initialClassIds.length > 0) {
+            initialClassIds.forEach(id => {
+                const cls = allClasses.find(c => c.id === id);
+                if (cls) selectedClasses.push(cls);
+            });
+        }
+
+        function searchClasses(query) {
+            if (!query.trim()) return [];
+            const q = query.toLowerCase().trim();
+            return allClasses.filter(c => c.name.toLowerCase().includes(q));
+        }
+
+        function renderClassResults(results) {
+            classResults.innerHTML = '';
+            if (results.length === 0) {
+                classResults.style.display = 'none';
+                return;
+            }
+            results.forEach(cls => {
+                const item = document.createElement('a');
+                item.href = '#';
+                item.className = 'list-group-item list-group-item-action';
+                item.textContent = cls.name;
+                item.dataset.id = cls.id;
+                item.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    addClass(cls);
+                    classSearchInput.value = '';
+                    classResults.style.display = 'none';
+                });
+                classResults.appendChild(item);
+            });
+            classResults.style.display = 'block';
+        }
+
+        function addClass(cls) {
+            if (selectedClasses.some(c => c.id === cls.id)) return;
+            selectedClasses.push(cls);
+            renderClassChips();
+            classSearchInput.value = '';
+            classResults.style.display = 'none';
+            updateClassHiddenInput();
+        }
+
+        function removeClass(clsId) {
+            selectedClasses = selectedClasses.filter(c => c.id !== clsId);
+            renderClassChips();
+            updateClassHiddenInput();
+        }
+
+        function renderClassChips() {
+            selectedClassesContainer.innerHTML = '';
+            selectedClasses.forEach(cls => {
+                const chip = document.createElement('span');
+                chip.className = 'badge bg-success d-inline-flex align-items-center gap-1 p-2';
+                chip.style.fontSize = '0.9rem';
+                chip.innerHTML = `
+                    ${cls.name}
+                    <span role="button" class="ms-1" style="cursor:pointer;" data-classid="${cls.id}">&times;</span>
+                `;
+                chip.querySelector('span[data-classid]').addEventListener('click', function() {
+                    removeClass(parseInt(this.dataset.classid));
+                });
+                selectedClassesContainer.appendChild(chip);
+            });
+        }
+
+        function updateClassHiddenInput() {
+            const ids = selectedClasses.map(c => c.id);
+            selectedClassesHidden.value = ids.join(',');
+            console.log('Классы сохранены (edit):', selectedClassesHidden.value);
+        }
+
+        // Поиск классов
+        let classTimeout = null;
+        classSearchInput.addEventListener('input', function() {
+            clearTimeout(classTimeout);
+            classTimeout = setTimeout(() => {
+                const results = searchClasses(this.value);
+                renderClassResults(results);
+            }, 200);
+        });
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('#classSearchInput') && !e.target.closest('#classSearchResults')) {
+                classResults.style.display = 'none';
+            }
+        });
+        document.getElementById('clearClassSearchBtn').addEventListener('click', function() {
+            classSearchInput.value = '';
+            classResults.style.display = 'none';
+            classSearchInput.focus();
+        });
+        classSearchInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const results = searchClasses(this.value);
+                if (results.length > 0) {
+                    addClass(results[0]);
+                    this.value = '';
+                    classResults.style.display = 'none';
+                }
+            }
+        });
+
+        // Инициализация чипсов классов (если есть)
+        if (selectedClasses.length > 0) {
+            renderClassChips();
+            updateClassHiddenInput();
+        }
+
+        // ========== ЧИПСЫ ДЛЯ ПОЛЬЗОВАТЕЛЕЙ ==========
+        const userSearchInput = document.getElementById('userSearchInput');
+        const userResults = document.getElementById('searchResults');
+        const selectedUsersContainer = document.getElementById('selectedUsersContainer');
+        const selectedUsersHidden = document.getElementById('selectedUsersIds');
         let selectedUsers = [];
 
-        // Предзаполнение из initialSelectedIds
         if (initialSelectedIds.length > 0) {
             initialSelectedIds.forEach(id => {
                 const user = allUsers.find(u => u.id === id);
                 if (user) selectedUsers.push(user);
             });
-        }
-
-        function roleText(type) {
-            const roles = {1: 'Ученик', 2: 'Учитель', 5: 'Админ', 6: 'Родитель'};
-            return roles[type] || 'Неизвестно';
         }
 
         function searchUsers(query) {
@@ -247,10 +382,10 @@
             return allUsers.filter(u => u.name.toLowerCase().includes(q));
         }
 
-        function renderResults(results) {
-            resultsContainer.innerHTML = '';
+        function renderUserResults(results) {
+            userResults.innerHTML = '';
             if (results.length === 0) {
-                resultsContainer.style.display = 'none';
+                userResults.style.display = 'none';
                 return;
             }
             results.forEach(user => {
@@ -262,31 +397,31 @@
                 item.addEventListener('click', function(e) {
                     e.preventDefault();
                     addUser(user);
-                    searchInput.value = '';
-                    resultsContainer.style.display = 'none';
+                    userSearchInput.value = '';
+                    userResults.style.display = 'none';
                 });
-                resultsContainer.appendChild(item);
+                userResults.appendChild(item);
             });
-            resultsContainer.style.display = 'block';
+            userResults.style.display = 'block';
         }
 
         function addUser(user) {
             if (selectedUsers.some(u => u.id === user.id)) return;
             selectedUsers.push(user);
-            renderChips();
-            searchInput.value = '';
-            resultsContainer.style.display = 'none';
-            updateHiddenInput();
+            renderUserChips();
+            userSearchInput.value = '';
+            userResults.style.display = 'none';
+            updateUserHiddenInput();
         }
 
         function removeUser(userId) {
             selectedUsers = selectedUsers.filter(u => u.id !== userId);
-            renderChips();
-            updateHiddenInput();
+            renderUserChips();
+            updateUserHiddenInput();
         }
 
-        function renderChips() {
-            selectedContainer.innerHTML = '';
+        function renderUserChips() {
+            selectedUsersContainer.innerHTML = '';
             selectedUsers.forEach(user => {
                 const chip = document.createElement('span');
                 chip.className = 'badge bg-primary d-inline-flex align-items-center gap-1 p-2';
@@ -298,65 +433,71 @@
                 chip.querySelector('span[data-userid]').addEventListener('click', function() {
                     removeUser(parseInt(this.dataset.userid));
                 });
-                selectedContainer.appendChild(chip);
+                selectedUsersContainer.appendChild(chip);
             });
         }
 
-        function updateHiddenInput() {
+        function updateUserHiddenInput() {
             const ids = selectedUsers.map(u => u.id);
-            hiddenInput.value = ids.join(',');
+            selectedUsersHidden.value = ids.join(',');
+            console.log('Пользователи сохранены (edit):', selectedUsersHidden.value);
         }
 
-        // Инициализация чипсов при загрузке (если есть предзаполнение)
-        if (selectedUsers.length > 0) {
-            renderChips();
-            updateHiddenInput();
+        function roleText(type) {
+            const roles = {1: 'Ученик', 2: 'Учитель', 5: 'Админ', 6: 'Родитель'};
+            return roles[type] || 'Неизвестно';
         }
 
-        // ---------- ОБРАБОТЧИКИ ПОИСКА ----------
-        let timeoutId = null;
-        searchInput.addEventListener('input', function() {
-            const query = this.value;
-            clearTimeout(timeoutId);
-            timeoutId = setTimeout(() => {
-                const results = searchUsers(query);
-                renderResults(results);
+        // Поиск пользователей
+        let userTimeout = null;
+        userSearchInput.addEventListener('input', function() {
+            clearTimeout(userTimeout);
+            userTimeout = setTimeout(() => {
+                const results = searchUsers(this.value);
+                renderUserResults(results);
             }, 200);
         });
-
         document.addEventListener('click', function(e) {
             if (!e.target.closest('#userSearchInput') && !e.target.closest('#searchResults')) {
-                resultsContainer.style.display = 'none';
+                userResults.style.display = 'none';
             }
         });
-
         document.getElementById('clearSearchBtn').addEventListener('click', function() {
-            searchInput.value = '';
-            resultsContainer.style.display = 'none';
-            searchInput.focus();
+            userSearchInput.value = '';
+            userResults.style.display = 'none';
+            userSearchInput.focus();
         });
-
-        searchInput.addEventListener('keydown', function(e) {
+        userSearchInput.addEventListener('keydown', function(e) {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 const results = searchUsers(this.value);
                 if (results.length > 0) {
                     addUser(results[0]);
                     this.value = '';
-                    resultsContainer.style.display = 'none';
+                    userResults.style.display = 'none';
                 }
             }
         });
 
-        // ---------- УПРАВЛЕНИЕ ВИДИМОСТЬЮ БЛОКА specific_users ----------
+        // Инициализация чипсов пользователей (если есть)
+        if (selectedUsers.length > 0) {
+            renderUserChips();
+            updateUserHiddenInput();
+        }
+
+        // ========== УПРАВЛЕНИЕ ВИДИМОСТЬЮ ==========
         function updateAudienceControls() {
             const type = typeSelect.value;
+            selectContainer.style.display = 'none';
+            specificUsersBlock.style.display = 'none';
+            multipleClassesBlock.style.display = 'none';
+
             if (type === 'specific_users') {
-                selectContainer.style.display = 'none';
                 specificUsersBlock.style.display = 'block';
+            } else if (type === 'multiple_classes') {
+                multipleClassesBlock.style.display = 'block';
             } else {
                 selectContainer.style.display = 'block';
-                specificUsersBlock.style.display = 'none';
                 // Заполняем select для остальных типов
                 targetSelect.innerHTML = '<option value="">Выберите...</option>';
                 if (!type) {
@@ -365,9 +506,9 @@
                 }
                 let options = [];
                 if (type === 'class') {
-                    options = classes.map(c => ({value: c.id, text: c.name}));
+                    options = allClasses.map(c => ({value: c.id, text: c.name}));
                 } else if (type === 'parallel') {
-                    const parallels = [...new Set(classes.map(c => c.name.replace(/-.*$/, '')))].sort();
+                    const parallels = [...new Set(allClasses.map(c => c.name.replace(/-.*$/, '')))].sort();
                     options = parallels.map(p => ({value: p, text: `${p} класс`}));
                 } else if (type === 'department') {
                     options = departments.map(d => ({value: d.id, text: d.name}));
@@ -379,17 +520,12 @@
                     const option = document.createElement('option');
                     option.value = opt.value;
                     option.textContent = opt.text;
-                    // Если текущее значение совпадает с сохранённым – выделяем
-                    const currentValue = targetSelect.dataset.currentValue;
-                    if (currentValue && String(opt.value) === currentValue) {
-                        option.selected = true;
-                    }
                     targetSelect.appendChild(option);
                 });
             }
         }
 
-        // Сохраняем текущее значение select для восстановления при переключении (если есть)
+        // Сохраняем текущее значение select для восстановления
         const currentSelectValue = targetSelect.value;
         if (currentSelectValue) {
             targetSelect.dataset.currentValue = currentSelectValue;

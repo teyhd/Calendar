@@ -259,14 +259,16 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner) {
                     <span>${props.creator || 'Неизвестен'}</span>
                 </div>
 
-                <!-- Аудитория -->
+                <!-- Аудитория (добавлена поддержка multiple_classes) -->
                 <div class="mb-2" style="display: flex; align-items: baseline; gap: 0.5rem;">
                     <span style="font-weight: 600; color: #172033; min-width: 110px;">🎯 Аудитория:</span>
                     <span>${props.target_audience_type === 'all' ? 'Все пользователи' :
                             props.target_audience_type === 'class' ? `Класс (ID: ${props.target_audience_id})` :
                             props.target_audience_type === 'parallel' ? `Параллель (ID: ${props.target_audience_id})` :
                             props.target_audience_type === 'department' ? `Кафедра (ID: ${props.target_audience_id})` :
-                            props.target_audience_type === 'specific_users' ? `Конкретные пользователи (ID: ${props.target_audience_id})` : 'Не указана'}</span>
+                            props.target_audience_type === 'specific_users' ? `Конкретные пользователи (ID: ${props.target_audience_id})` :
+                            props.target_audience_type === 'multiple_classes' ? `Несколько классов (ID: ${props.target_audience_id})` :
+                            'Не указана'}</span>
                 </div>
 
                 <!-- Дата создания -->
