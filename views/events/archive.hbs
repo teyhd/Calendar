@@ -26,9 +26,9 @@
                             <div>📅 {{formatDate start_datetime}} — {{formatDate end_datetime}}</div>
                             <div>📍 {{location}}</div>
                             <div>👤 {{creator_name}}</div>
-                            {{#ifEquals ../userType 2}}
+                            {{#if (isTeacherRole ../userType)}}
                                 <div>👥 Участников: {{participants_count}}</div>
-                            {{/ifEquals}}
+                            {{/if}}
                             {{#ifEquals ../userType 6}}
                                 <div>👶 {{student_name}}</div>
                             {{/ifEquals}}

@@ -98,7 +98,7 @@ function isAdmin(req, res, next) {
 }
 
 function isTeacher(req, res, next) {
-    if (!req.session.user || ![2, 5].includes(req.session.user.type)) {
+    if (!req.session.user || ![2, 3, 4, 5].includes(req.session.user.type)) {
         return res.status(403).send('Доступ запрещен');
     }
     next();
@@ -142,7 +142,7 @@ app.post('/auth/login', async (req, res) => {
         const [rows] = await pool.query(
             `SELECT u.*, r.name as role_name 
              FROM users u 
-             JOIN roles r ON u.type = r.id 
+             JOIN role_name r ON u.type = r.id 
              WHERE u.name = ? AND u.pin = ?`,
             [name, pin]
         );
@@ -155,7 +155,7 @@ app.post('/auth/login', async (req, res) => {
         let kaf_name = null;
         if (user.kaf) {
             const [kafRows] = await pool.query(
-                'SELECT name FROM departments WHERE id = ?',
+                'SELECT name FROM kaf_name WHERE id = ?',
                 [user.kaf]
             );
             if (kafRows.length > 0) {
@@ -194,8 +194,8 @@ app.get('/admin/users', isAdmin, async (req, res) => {
         const [users] = await pool.query(`
             SELECT u.*, d.name as kaf_name, r.name as role_name
             FROM users u
-            LEFT JOIN departments d ON u.kaf = d.id
-            JOIN roles r ON u.type = r.id
+            LEFT JOIN kaf_name d ON u.kaf = d.id
+            JOIN role_name r ON u.type = r.id
             ORDER BY u.id
         `);
         res.render('admin/users', { 
@@ -257,8 +257,8 @@ app.post('/admin/users/delete/:id', isAdmin, async (req, res) => {
 app.get('/admin/settings', isAdmin, async (req, res) => {
     try {
         // Классы (type=1) и кафедры (type=2)
-        const [classes] = await pool.query('SELECT * FROM departments WHERE type = 1 ORDER BY name');
-        const [departments] = await pool.query('SELECT * FROM departments WHERE type = 2 ORDER BY name');
+        const [classes] = await pool.query('SELECT * FROM kaf_name WHERE type = 1 ORDER BY name');
+        const [departments] = await pool.query('SELECT * FROM kaf_name WHERE type = 2 ORDER BY name');
         // Предметов больше нет в структуре sso, оставляем пустой массив или убираем
         const [subjects] = await pool.query('SELECT * FROM subjects'); // если таблица subjects ещё существует
         const [eventTypes] = await pool.query('SELECT * FROM event_types ORDER BY name');
@@ -287,8 +287,8 @@ app.get('/api/admin/users', isAdmin, async (req, res) => {
             SELECT u.id, u.name, u.kaf, u.type, u.pin,
                    d.name as kaf_name, r.name as role_name
             FROM users u
-            LEFT JOIN departments d ON u.kaf = d.id
-            JOIN roles r ON u.type = r.id
+            LEFT JOIN kaf_name d ON u.kaf = d.id
+            JOIN role_name r ON u.type = r.id
             ORDER BY u.id
         `);
         res.json(users);
@@ -305,14 +305,14 @@ app.get('/api/admin/users', isAdmin, async (req, res) => {
 app.get('/events/create', isAuthenticated, async (req, res) => {
     try {
         const [types] = await pool.query('SELECT * FROM event_types ORDER BY name');
-        const [classes] = await pool.query('SELECT * FROM departments WHERE type = 1 ORDER BY name');
-        const [departments] = await pool.query('SELECT * FROM departments WHERE type = 2 ORDER BY name');
+        const [classes] = await pool.query('SELECT * FROM kaf_name WHERE type = 1 ORDER BY name');
+        const [departments] = await pool.query('SELECT * FROM kaf_name WHERE type = 2 ORDER BY name');
         // subjects – возможно, больше нет, оставим для совместимости
         const [subjects] = await pool.query('SELECT * FROM subjects ORDER BY name');
         const [users] = await pool.query(`
             SELECT id, name, type 
             FROM users 
-            WHERE type IN (1, 2, 5, 6)  
+            WHERE type IN (1, 2, 3, 4, 5, 6)
             ORDER BY name
         `);
         
@@ -354,7 +354,7 @@ app.post('/events/create', isAuthenticated, async (req, res) => {
 
     // is_admin_event для учеников и родителей = 0
     let isAdminEvent = is_admin_event ? 1 : 0;
-    if (![2, 5].includes(req.session.user.type)) {
+    if (![2, 3, 4, 5].includes(req.session.user.type)) {
         isAdminEvent = 0;
     }
 
@@ -411,13 +411,13 @@ app.get('/events/edit/:id', isAuthenticated, async (req, res) => {
 
         // Получаем справочники
         const [types] = await pool.query('SELECT * FROM event_types ORDER BY name');
-        const [classes] = await pool.query('SELECT * FROM departments WHERE type = 1 ORDER BY name');
-        const [departments] = await pool.query('SELECT * FROM departments WHERE type = 2 ORDER BY name');
+        const [classes] = await pool.query('SELECT * FROM kaf_name WHERE type = 1 ORDER BY name');
+        const [departments] = await pool.query('SELECT * FROM kaf_name WHERE type = 2 ORDER BY name');
         const [subjects] = await pool.query('SELECT * FROM subjects ORDER BY name');
         const [users] = await pool.query(`
             SELECT id, name, type 
             FROM users 
-            WHERE type IN (1, 2, 5, 6) 
+            WHERE type IN (1, 2, 3, 4, 5, 6)
             ORDER BY name
         `);
 
@@ -482,7 +482,7 @@ app.post('/events/edit/:id', isAuthenticated, async (req, res) => {
 
         // Принудительно сбрасываем is_admin_event для учеников и родителей
         let isAdminEvent = is_admin_event ? 1 : 0;
-        if (![2, 5].includes(req.session.user.type)) {
+        if (![2, 3, 4, 5].includes(req.session.user.type)) {
             isAdminEvent = 0;
         }
 
@@ -563,7 +563,7 @@ app.get('/my-events', isAuthenticated, async (req, res) => {
             `, [userId, userId]);
             title = 'Мероприятия моих детей';
 
-        } else if (userType === 2 || userType === 5) { // Учитель или Админ
+        } else if ([2, 3, 4, 5].includes(userType)) { // Педагоги (Учитель, Наставник, Тьютор) или Админ
             [events] = await pool.query(`
                 SELECT e.*, u.name as creator_name, et.name as type_name,
                        e.is_registration_enabled
@@ -691,7 +691,7 @@ app.get('/events/archive', isAuthenticated, async (req, res) => {
                 ORDER BY e.end_datetime DESC
             `);
 
-        } else if (userType === 2 || userType === 5) { // Учитель или Админ
+        } else if ([2, 3, 4, 5].includes(userType)) { // Педагоги (Учитель, Наставник, Тьютор) или Админ
             [events] = await pool.query(`
                 SELECT e.*, u.name as creator_name, et.name as type_name,
                        e.is_registration_enabled,
@@ -779,7 +779,7 @@ app.get('/api/events', isAuthenticated, async (req, res) => {
                 visibilityCondition += `
                     OR (e.status = 'approved')
                 `;
-            } else if (user.type === 2) { // Учитель
+            } else if ([2, 3, 4].includes(user.type)) { // Учитель, Наставник, Тьютор
                 visibilityCondition += `
                     OR (
                         e.status = 'approved'
@@ -923,7 +923,7 @@ app.get('/api/events/:id/participants', isAuthenticated, async (req, res) => {
             SELECT u.id, u.name, u.kaf, d.name as class_name
             FROM event_participants ep
             LEFT JOIN users u ON ep.user_id = u.id
-            LEFT JOIN departments d ON u.kaf = d.id AND d.type = 1
+            LEFT JOIN kaf_name d ON u.kaf = d.id AND d.type = 1
             WHERE ep.event_id = ?
             ORDER BY u.name
         `, [eventId]);

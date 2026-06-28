@@ -61,6 +61,8 @@ export function registerHelpers(handlebarsInstance) {
         const roles = {
             1: 'Ученик',
             2: 'Учитель',
+            3: 'Наставник',
+            4: 'Тьютор',
             5: 'Админ',
             6: 'Родитель'
         };
@@ -108,12 +110,30 @@ export function registerHelpers(handlebarsInstance) {
         const roles = {
             1: 'Ученик',
             2: 'Учитель',
+            3: 'Наставник',
+            4: 'Тьютор',
             5: 'Админ',
             6: 'Родитель'
         };
         return roles[type] || 'Неизвестно';
     });
+
+    hbs.registerHelper('ifTeacher', function(options) {
+        const userType = this.user?.type;
+        if ([2, 3, 4].includes(userType)) {
+            return options.fn(this);
+        } else {
+            return options.inverse(this);
+        }
+    });
+
+    // Хелпер для проверки, является ли тип педагогической ролью (2,3,4)
+    hbs.registerHelper('isTeacherRole', function(type) {
+        return [2, 3, 4].includes(type);
+    });
 }
+
+
 
 // Утилиты (экспортируются для использования в JavaScript, не в шаблонах)
 export function formatDateForInput(date) {

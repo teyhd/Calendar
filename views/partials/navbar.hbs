@@ -94,11 +94,13 @@
                     </a>
                 </li>
 
+                {{#ifTeacher}}
                     <li class="nav-item">
                         <a class="nav-link" href="/events/create">
                             <i class="bi bi-plus-circle me-2"></i> Создать
                         </a>
                     </li>
+                {{/ifTeacher}}
 
                 {{#ifEquals user.type 5}}
                     <li class="nav-item">

@@ -45,6 +45,8 @@
 {{else}}
     <div class="alert alert-info border-0 shadow-sm" style="border-radius: 0.75rem;">
         <p class="mb-2">У вас пока нет созданных мероприятий.</p>
-        <a href="/events/create" class="btn btn-primary">➕ Создать мероприятие</a>
+        {{#ifTeacher}}
+            <a href="/events/create" class="btn btn-primary">➕ Создать мероприятие</a>
+        {{/ifTeacher}}
     </div>
 {{/if}}

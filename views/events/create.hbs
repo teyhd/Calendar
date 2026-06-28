@@ -228,15 +228,15 @@
                         </div>
                     </div>
 
-                    <!-- Для администратора (показывается только учителям и админам) -->
-                    {{#ifEquals user.type 2}}
+                    <!-- Для администратора (показывается только педагогам и админам) -->
+                    {{#ifTeacher}}
                     <div class="mb-3 form-check">
                         <input type="checkbox" class="form-check-input" id="is_admin_event" name="is_admin_event" value="1">
                         <label class="form-check-label" for="is_admin_event">
                             🔒 Только для администраторов (не видно ученикам и родителям)
                         </label>
                     </div>
-                    {{/ifEquals}}
+                    {{/ifTeacher}}
                     {{#ifEquals user.type 5}}
                         <div class="mb-3 form-check">
                             <input type="checkbox" class="form-check-input" id="is_admin_event" name="is_admin_event" value="1">
@@ -484,7 +484,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function roleText(type) {
-        const roles = {1: 'Ученик', 2: 'Учитель', 5: 'Админ', 6: 'Родитель'};
+        const roles = {1: 'Ученик', 2: 'Учитель', 3: 'Наставник', 4: 'Тьютор', 5: 'Админ', 6: 'Родитель'};
         return roles[type] || 'Неизвестно';
     }
 
