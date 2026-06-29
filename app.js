@@ -53,7 +53,7 @@ app.use(async (req, res, next) => {
                 `SELECT * FROM notifications 
                  WHERE user_id = ? 
                  ORDER BY created_at DESC 
-                 LIMIT 10`,
+                 LIMIT 5`,   // ← сокращено с 10 до 5
                 [req.session.user.id]
             );
             const [unreadResult] = await pool.query(
@@ -1059,6 +1059,54 @@ app.post('/events/cancel/:id', isAuthenticated, async (req, res) => {
     } catch (error) {
         mlog('[ERROR]', 'Ошибка отмены мероприятия', error);
         res.status(500).send('Ошибка сервера');
+    }
+});
+
+// ----- Все уведомления -----
+app.get('/notifications/all', isAuthenticated, async (req, res) => {
+    try {
+        const [allNotifications] = await pool.query(
+            `SELECT * FROM notifications 
+             WHERE user_id = ? 
+             ORDER BY created_at DESC`,
+            [req.session.user.id]
+        );
+        res.render('notifications/all', {
+            title: 'Все уведомления',
+            allNotifications  // ← другое имя
+        });
+    } catch (error) {
+        mlog('[ERROR]', 'Ошибка загрузки уведомлений', error);
+        res.status(500).send('Ошибка сервера');
+    }
+});
+
+// ----- Пометить все уведомления как прочитанные -----
+app.post('/notifications/mark-all-read', isAuthenticated, async (req, res) => {
+    try {
+        await pool.query(
+            'UPDATE notifications SET is_read = 1 WHERE user_id = ?',
+            [req.session.user.id]
+        );
+        res.redirect('/notifications/all');
+    } catch (error) {
+        mlog('[ERROR]', 'Ошибка пометки уведомлений', error);
+        res.status(500).send('Ошибка сервера');
+    }
+});
+
+// ----- Пометить одно уведомление как прочитанное (через AJAX или GET) -----
+app.post('/notifications/mark-read/:id', isAuthenticated, async (req, res) => {
+    const notificationId = req.params.id;
+    try {
+        await pool.query(
+            'UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?',
+            [notificationId, req.session.user.id]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        mlog('[ERROR]', 'Ошибка пометки уведомления', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
     }
 });
 

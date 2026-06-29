@@ -674,3 +674,51 @@ h1 {
         font-size: 1.2rem;
     }
 }
+
+
+/* Уведомления */
+.notifications-dropdown {
+    min-width: 600px;
+    max-width: 800px;
+    padding: 0.5rem 0;
+}
+@media (max-width: 768px) {
+    .notifications-dropdown {
+        min-width: 300px;
+        max-width: 90vw;
+    }
+}
+/* Максимально специфичный селектор – перебивает все */
+.navbar .navbar-nav .notifications-dropdown .dropdown-item {
+    white-space: normal;
+    word-wrap: break-word;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #dee2e6 !important;
+    border-top: none !important; /* убираем верхний, если есть */
+    margin-bottom: 0;
+    border-radius: 0;
+    background-color: #fff;
+}
+.navbar .navbar-nav .notifications-dropdown .dropdown-item:last-child {
+    border-bottom: none !important;
+}
+.navbar .navbar-nav .notifications-dropdown .dropdown-item:hover {
+    background-color: #f8f9fa;
+}
+.navbar .navbar-nav .notifications-dropdown .dropdown-item .badge {
+    font-size: 0.7rem;
+}
+.navbar .navbar-nav .notifications-dropdown .dropdown-item small {
+    display: block;
+    line-height: 1.4;
+}
+.navbar .navbar-nav .notifications-dropdown .dropdown-item .time {
+    font-size: 0.7rem;
+    color: #999;
+}
+.navbar .navbar-nav .notifications-dropdown .dropdown-divider {
+    margin: 0;
+}
+.navbar .navbar-nav .notifications-dropdown .text-center {
+    font-weight: 600;
+}
