@@ -12,14 +12,17 @@
                      onmouseover="this.style.transform='translateY(-3px)'"
                      onmouseout="this.style.transform=''">
                     <div class="card-header bg-transparent border-bottom-0 d-flex justify-content-between align-items-center pt-3 pb-0">
-                        <span class="badge bg-secondary" style="font-weight: 500; border-radius: 1rem; padding: 0.4rem 0.75rem;">
-                            Завершено
+                        <!-- Динамический бейдж статуса -->
+                        <span class="badge" style="background-color: {{statusColor status}}; color: #fff; font-weight: 500; border-radius: 1rem; padding: 0.4rem 0.75rem;">
+                            {{statusText status}}
                         </span>
                         <span class="badge bg-secondary" style="font-weight: 500; border-radius: 1rem; padding: 0.4rem 0.75rem;">
                             {{type_name}}
                         </span>
                     </div>
-                    <div class="card-body">
+                    <div class="card-body position-relative">
+                        <!-- Иконка кликабельности -->
+                        <i class="bi bi-hand-index-thumb float-end text-muted opacity-50" style="font-size: 1.2rem;"></i>
                         <h5 class="card-title fw-semibold" style="color: var(--dark-gray, #172033);">{{title}}</h5>
                         <p class="card-text small text-muted">{{description}}</p>
                         <div class="small text-muted">
@@ -35,11 +38,14 @@
                             {{#ifEquals ../userType 1}}
                                 <div>📝 {{participation_status}}</div>
                             {{/ifEquals}}
+                            {{#if cancel_reason}}
+                                <div><strong>Причина:</strong> {{cancel_reason}}</div>
+                            {{/if}}
                         </div>
                     </div>
                     <div class="card-footer bg-white border-top-0 pt-0">
-                        <div class="text-center">
-                            <span class="text-muted small" style="font-size: 0.75rem;">Нажмите для просмотра</span>
+                        <div class="text-center text-muted small" style="font-size: 0.75rem; opacity: 0.7;">
+                            <i class="bi bi-chevron-down"></i>
                         </div>
                     </div>
                 </div>

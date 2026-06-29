@@ -121,4 +121,46 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
+// ===== УДАЛЕНИЕ МЕРОПРИЯТИЯ (pending) =====
+function deleteEvent(eventId) {
+    if (!confirm('Вы уверены, что хотите удалить это мероприятие?')) return;
+    
+    fetch(`/events/delete/${eventId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => {
+        if (response.redirected) {
+            window.location.href = response.url;
+        } else {
+            return response.text();
+        }
+    })
+    .catch(error => {
+        console.error('Ошибка удаления:', error);
+        alert('Ошибка при удалении мероприятия');
+    });
+}
+
+// ===== ОТМЕНА МЕРОПРИЯТИЯ (approved) =====
+function cancelEvent(eventId) {
+    const reason = prompt('Укажите причину отмены мероприятия:', '');
+    if (reason === null) return;
+    
+    if (!confirm('Вы уверены, что хотите отменить это мероприятие?')) return;
+    
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = `/events/cancel/${eventId}`;
+    
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'cancel_reason';
+    input.value = reason || 'Причина не указана';
+    
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
+}
+
 console.log('main.js загружен, openEventModal доступна:', typeof window.openEventModal);

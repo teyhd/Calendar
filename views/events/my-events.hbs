@@ -19,7 +19,9 @@
                             {{type_name}}
                         </span>
                     </div>
-                    <div class="card-body">
+                    <div class="card-body position-relative">
+                        <!-- Иконка кликабельности -->
+                        <i class="bi bi-hand-index-thumb float-end text-muted opacity-50" style="font-size: 1.2rem;"></i>
                         <h5 class="card-title fw-semibold" style="color: var(--dark-gray, #172033);">{{title}}</h5>
                         <p class="card-text small text-muted">{{description}}</p>
                         <div class="small text-muted">
@@ -28,15 +30,28 @@
                         </div>
                     </div>
                     <div class="card-footer bg-white border-top-0 pt-0">
-                        <div class="d-grid">
-                            {{#if (eq status "pending")}}
-                                <a href="/events/edit/{{id}}" class="btn btn-primary btn-sm fw-semibold" onclick="event.stopPropagation();">
-                                    ✏️ Редактировать
-                                </a>
-                            {{else}}
-                                <span class="text-muted small text-center" style="font-size: 0.75rem;">Нажмите для просмотра</span>
-                            {{/if}}
-                        </div>
+                        {{#if (eq status "pending")}}
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <a href="/events/edit/{{id}}" class="btn btn-primary btn-sm w-100 fw-semibold" onclick="event.stopPropagation();">
+                                        ✏️ Редактировать
+                                    </a>
+                                </div>
+                                <div class="col-6">
+                                    <button class="btn btn-danger btn-sm w-100 fw-semibold" onclick="event.stopPropagation(); deleteEvent({{id}})">
+                                        🗑️ Удалить
+                                    </button>
+                                </div>
+                            </div>
+                        {{else if (eq status "approved")}}
+                            <button class="btn btn-danger btn-sm w-100 fw-semibold" onclick="event.stopPropagation(); cancelEvent({{id}})">
+                                ❌ Отменить мероприятие
+                            </button>
+                        {{else}}
+                            <div class="text-center text-muted">
+                                <i class="bi bi-chevron-down"></i>
+                            </div>
+                        {{/if}}
                     </div>
                 </div>
             </div>

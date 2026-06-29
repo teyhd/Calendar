@@ -342,7 +342,6 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner) {
         const list = document.getElementById('participantsList');
         const count = document.getElementById('participantsCount');
 
-        // Проверяем, что элементы существуют
         if (container && list && count) {
             container.style.display = 'block';
 
@@ -388,6 +387,35 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner) {
         `;
     }
 
+    // ========== ДОБАВЛЕННЫЕ КНОПКИ ==========
+    // Кнопка "Удалить" (для pending, только создатель)
+    if (isOwner && props.status === 'pending') {
+        footerButtons += `
+            <button type="button" class="btn btn-danger" onclick="deleteEvent(${event.id})">
+                🗑️ Удалить
+            </button>
+        `;
+    }
+
+    // Кнопка "Отменить" (для approved, организатор или админ)
+    if ((isOwner || isAdmin) && props.status === 'approved') {
+        footerButtons += `
+            <button type="button" class="btn btn-warning" onclick="cancelEvent(${event.id})">
+                ❌ Отменить мероприятие
+            </button>
+        `;
+    }
+
+    // Кнопка "Модерация" (для админа, если статус pending)
+    if (isAdmin && props.status === 'pending') {
+        footerButtons += `
+            <a href="/events/moderation" class="btn btn-warning">
+                🔍 Модерация
+            </a>
+        `;
+    }
+    // =====================================
+
     // Запись / отмена записи (для учеников и родителей)
     const userRole = parseInt(window.currentUserRole);
     if ((userRole === 1 || userRole === 6) && props.status === 'approved' && isRegistrationEnabled) {
@@ -411,7 +439,6 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner) {
                 modalFooter.innerHTML = buttons;
             })
             .catch(() => {
-                // При ошибке показываем кнопку "Записаться" по умолчанию
                 let buttons = footerButtons;
                 buttons += `
                     <button type="button" class="btn btn-success" onclick="registerForEvent(${event.id})">

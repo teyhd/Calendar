@@ -542,7 +542,8 @@ app.get('/my-events', isAuthenticated, async (req, res) => {
                 LEFT JOIN users u ON e.created_by = u.id
                 LEFT JOIN event_types et ON e.event_type_id = et.id
                 LEFT JOIN event_participants ep ON e.id = ep.event_id AND ep.user_id = ?
-                WHERE e.created_by = ? OR ep.user_id = ?
+                WHERE (e.created_by = ? OR ep.user_id = ?)
+                  AND e.status IN ('pending', 'approved')
                 ORDER BY e.start_datetime DESC
             `, [userId, userId, userId]);
             title = 'Мои мероприятия';
@@ -557,13 +558,14 @@ app.get('/my-events', isAuthenticated, async (req, res) => {
                 LEFT JOIN event_types et ON e.event_type_id = et.id
                 LEFT JOIN event_participants ep ON e.id = ep.event_id
                 LEFT JOIN users s ON ep.user_id = s.id
-                WHERE e.created_by = ? 
-                   OR ep.user_id IN (SELECT student_id FROM parent_student WHERE parent_id = ?)
+                WHERE (e.created_by = ? 
+                       OR ep.user_id IN (SELECT student_id FROM parent_student WHERE parent_id = ?))
+                  AND e.status IN ('pending', 'approved')
                 ORDER BY e.start_datetime DESC
             `, [userId, userId]);
             title = 'Мероприятия моих детей';
 
-        } else if ([2, 3, 4, 5].includes(userType)) { // Педагоги (Учитель, Наставник, Тьютор) или Админ
+        } else if ([2, 3, 4, 5].includes(userType)) { // Педагоги или Админ
             [events] = await pool.query(`
                 SELECT e.*, u.name as creator_name, et.name as type_name,
                        e.is_registration_enabled
@@ -571,6 +573,7 @@ app.get('/my-events', isAuthenticated, async (req, res) => {
                 LEFT JOIN users u ON e.created_by = u.id
                 LEFT JOIN event_types et ON e.event_type_id = et.id
                 WHERE e.created_by = ?
+                  AND e.status IN ('pending', 'approved')
                 ORDER BY e.created_at DESC
             `, [userId]);
             title = userType === 5 ? 'Мои мероприятия (как администратор)' : 'Мои мероприятия (как организатор)';
@@ -668,30 +671,29 @@ app.get('/events/archive', isAuthenticated, async (req, res) => {
                         CASE 
                             WHEN e.status = 'completed' THEN 'Участвовал'
                             WHEN e.status = 'canceled' THEN 'Отменено'
+                            WHEN e.status = 'rejected' THEN 'Отклонено'
                         END as participation_status
                 FROM events e
                 LEFT JOIN users u ON e.created_by = u.id
                 LEFT JOIN event_types et ON e.event_type_id = et.id
                 LEFT JOIN event_participants ep ON e.id = ep.event_id AND ep.user_id = ?
                 WHERE (e.created_by = ? OR ep.user_id = ?)
-                  AND e.end_datetime < NOW()
-                  AND e.status IN ('completed', 'canceled')
+                  AND e.status IN ('completed', 'canceled', 'rejected')
                 ORDER BY e.end_datetime DESC
             `, [userId, userId, userId]);
 
-        } else if (userType === 6) { // Родитель – пока без parent_student, просто покажем все завершённые
+        } else if (userType === 6) { // Родитель
             [events] = await pool.query(`
                 SELECT e.*, u.name as creator_name, et.name as type_name,
                        e.is_registration_enabled
                 FROM events e
                 LEFT JOIN users u ON e.created_by = u.id
                 LEFT JOIN event_types et ON e.event_type_id = et.id
-                WHERE e.end_datetime < NOW()
-                  AND e.status IN ('completed', 'canceled')
+                WHERE e.status IN ('completed', 'canceled', 'rejected')
                 ORDER BY e.end_datetime DESC
             `);
 
-        } else if ([2, 3, 4, 5].includes(userType)) { // Педагоги (Учитель, Наставник, Тьютор) или Админ
+        } else if ([2, 3, 4, 5].includes(userType)) { // Педагоги или Админ
             [events] = await pool.query(`
                 SELECT e.*, u.name as creator_name, et.name as type_name,
                        e.is_registration_enabled,
@@ -699,13 +701,13 @@ app.get('/events/archive', isAuthenticated, async (req, res) => {
                        CASE 
                            WHEN e.status = 'completed' THEN 'Завершено'
                            WHEN e.status = 'canceled' THEN 'Отменено'
+                           WHEN e.status = 'rejected' THEN 'Отклонено'
                        END as participation_status
                 FROM events e
                 LEFT JOIN users u ON e.created_by = u.id
                 LEFT JOIN event_types et ON e.event_type_id = et.id
                 WHERE e.created_by = ?
-                  AND e.end_datetime < NOW()
-                  AND e.status IN ('completed', 'canceled')
+                  AND e.status IN ('completed', 'canceled', 'rejected')
                 ORDER BY e.end_datetime DESC
             `, [userId]);
         }
@@ -965,6 +967,101 @@ app.post('/api/events/:id/complete', isAuthenticated, async (req, res) => {
         res.status(500).json({ error: 'Ошибка сервера' });
     }
 });
+
+// ----- Удаление мероприятия (только для pending, только создатель) -----
+app.post('/events/delete/:id', isAuthenticated, async (req, res) => {
+    const eventId = req.params.id;
+    const userId = req.session.user.id;
+
+    try {
+        // Проверяем, что мероприятие существует, принадлежит пользователю и имеет статус pending
+        const [event] = await pool.query(
+            'SELECT id, status, created_by FROM events WHERE id = ? AND created_by = ? AND status = "pending"',
+            [eventId, userId]
+        );
+        if (event.length === 0) {
+            return res.status(404).send('Мероприятие не найдено или не может быть удалено');
+        }
+
+        await pool.query('DELETE FROM events WHERE id = ?', [eventId]);
+        mlog(`Мероприятие ${eventId} удалено пользователем ${userId}`);
+        res.redirect('/');
+    } catch (error) {
+        mlog('[ERROR]', 'Ошибка удаления мероприятия', error);
+        res.status(500).send('Ошибка сервера');
+    }
+});
+
+
+// ----- Отмена мероприятия (для approved, организатор или админ) -----
+app.post('/events/cancel/:id', isAuthenticated, async (req, res) => {
+    const eventId = req.params.id;
+    const userId = req.session.user.id;
+    const { cancel_reason } = req.body;
+
+    try {
+        // Проверяем мероприятие
+        const [eventRows] = await pool.query(
+            'SELECT id, title, created_by, status FROM events WHERE id = ?',
+            [eventId]
+        );
+        if (eventRows.length === 0) {
+            return res.status(404).send('Мероприятие не найдено');
+        }
+        const event = eventRows[0];
+        
+        // Проверяем права: организатор или админ
+        if (event.created_by !== userId && req.session.user.type !== 5) {
+            return res.status(403).send('Нет прав на отмену мероприятия');
+        }
+
+        // Проверяем статус
+        if (event.status !== 'approved') {
+            return res.status(400).send('Можно отменить только утверждённое мероприятие');
+        }
+
+        // Обновляем статус
+        await pool.query(
+            'UPDATE events SET status = "canceled", cancel_reason = ? WHERE id = ?',
+            [cancel_reason || 'Причина не указана', eventId]
+        );
+        mlog(`Мероприятие ${eventId} отменено пользователем ${userId}`);
+
+        // === УВЕДОМЛЕНИЯ ===
+        const message = `Мероприятие "${event.title}" отменено. Причина: ${cancel_reason || 'не указана'}`;
+
+        // 1. Уведомление администраторам (если отменил не админ)
+        if (req.session.user.type !== 5) {
+            const [admins] = await pool.query('SELECT id FROM users WHERE type = 5');
+            for (const admin of admins) {
+                await createNotification(admin.id, eventId, 'canceled', message);
+            }
+        }
+
+        // 2. Уведомление создателю (если отменил не сам создатель)
+        if (event.created_by !== userId) {
+            await createNotification(event.created_by, eventId, 'canceled', message);
+        }
+
+        // 3. Уведомление всем записавшимся участникам
+        const [participants] = await pool.query(
+            'SELECT DISTINCT user_id FROM event_participants WHERE event_id = ?',
+            [eventId]
+        );
+        for (const p of participants) {
+            // Не дублируем уведомление для тех, кто уже получил
+            if (p.user_id !== userId && p.user_id !== event.created_by) {
+                await createNotification(p.user_id, eventId, 'canceled', message);
+            }
+        }
+
+        res.redirect('/');
+    } catch (error) {
+        mlog('[ERROR]', 'Ошибка отмены мероприятия', error);
+        res.status(500).send('Ошибка сервера');
+    }
+});
+
 
 // ----- Получение одного мероприятия -----
 app.get('/api/events/:id', isAuthenticated, async (req, res) => {
