@@ -121,12 +121,12 @@
                                     <div id="specific_users_block" style="{{#if (eq event.target_audience_type "specific_users")}}display:block;{{else}}display:none;{{/if}}">
                                         <label class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Выберите пользователей</label>
                                         <div class="row g-2">
-                                            <div class="col-12">
+                                            <div class="col-12" style="position: relative;">
                                                 <div class="input-group">
                                                     <input type="text" class="form-control" id="userSearchInput" placeholder="Начните вводить имя пользователя..." autocomplete="off">
                                                     <button class="btn btn-outline-secondary" type="button" id="clearSearchBtn">✕</button>
                                                 </div>
-                                                <div id="searchResults" class="list-group mt-1" style="display: none; max-height: 200px; overflow-y: auto; position: absolute; z-index: 1000; width: 100%;"></div>
+                                                <div id="searchResults" class="list-group mt-1" style="display: none; max-height: 200px; overflow-y: auto; position: absolute; z-index: 1000; left: 0; width: 100%; max-width: 350px;"></div>
                                             </div>
                                             <div class="col-12">
                                                 <div id="selectedUsersContainer" class="d-flex flex-wrap gap-2 mt-2">
@@ -138,15 +138,15 @@
                                         </div>
                                     </div>
                                     <!-- Блок: Несколько классов (поиск + чипсы) -->
-                                    <div id="multiple_classes_block" style="display: none;">
+                                    <div id="multiple_classes_block" style="{{#if (eq event.target_audience_type "multiple_classes")}}display:block;{{else}}display:none;{{/if}}">
                                         <label class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Выберите классы</label>
                                         <div class="row g-2">
-                                            <div class="col-12">
+                                            <div class="col-12" style="position: relative;">
                                                 <div class="input-group">
                                                     <input type="text" class="form-control" id="classSearchInput" placeholder="Начните вводить название класса..." autocomplete="off">
                                                     <button class="btn btn-outline-secondary" type="button" id="clearClassSearchBtn">✕</button>
                                                 </div>
-                                                <div id="classSearchResults" class="list-group mt-1" style="display: none; max-height: 200px; overflow-y: auto; position: absolute; z-index: 1000; width: 100%;"></div>
+                                                <div id="classSearchResults" class="list-group mt-1" style="display: none; max-height: 200px; overflow-y: auto; position: absolute; z-index: 1000; left: 0; width: 100%; max-width: 350px;"></div>
                                             </div>
                                             <div class="col-12">
                                                 <div id="selectedClassesContainer" class="d-flex flex-wrap gap-2 mt-2">
