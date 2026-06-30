@@ -19,8 +19,10 @@
     "express": "^5.2.1",
     "express-handlebars": "^6.0.6",
     "express-session": "^1.19.0",
+    "express-validator": "^7.3.2",
     "fs-extra": "^11.3.5",
-    "mysql2": "^3.22.5"
+    "mysql2": "^3.22.5",
+    "node-cron": "^4.5.0"
   },
   "devDependencies": {
     "autoprefixer": "^10.5.1",

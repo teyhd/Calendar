@@ -5,6 +5,7 @@ import handlebars from 'handlebars';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import cron from 'node-cron';
 import pool from './vendor/db.mjs';
 import { mlog } from './vendor/logs.js';
 import { registerHelpers } from './vendor/hlp.mjs';
@@ -87,6 +88,37 @@ app.use((req, res, next) => {
     next();
 });
 
+// ----- Дополнительные данные для родителя (класс ребёнка) -----
+app.use(async (req, res, next) => {
+    if (req.session.user && req.session.user.type === 6) {
+        try {
+            // Получаем всех детей родителя
+            const [children] = await pool.query(
+                `SELECT u.kaf, k.name as class_name
+                 FROM parent_student ps
+                 JOIN users u ON ps.student_id = u.id
+                 LEFT JOIN kaf_name k ON u.kaf = k.id
+                 WHERE ps.parent_id = ?`,
+                [req.session.user.id]
+            );
+            if (children.length > 0) {
+                // Собираем названия классов всех детей в строку через запятую
+                const classNames = children.map(c => c.class_name).filter(c => c).join(', ');
+                req.session.user.child_kaf_name = classNames || 'Не указан';
+            } else {
+                req.session.user.child_kaf_name = 'Не указан';
+            }
+            // Обновляем res.locals.user
+            res.locals.user = req.session.user;
+        } catch (error) {
+            mlog('[ERROR]', 'Ошибка загрузки класса ребёнка для родителя', error);
+            req.session.user.child_kaf_name = 'Ошибка загрузки';
+            res.locals.user = req.session.user;
+        }
+    }
+    next();
+});
+
 // ----- Middleware проверки ролей (по type) -----
 function isAuthenticated(req, res, next) {
     if (!req.session.user) {
@@ -121,6 +153,67 @@ async function createNotification(userId, eventId, type, message) {
         mlog('[ERROR]', 'Ошибка создания уведомления', error);
     }
 }
+
+// ----- Автоматическое завершение мероприятий -----
+async function autoCompleteEvents() {
+    try {
+        // Берём текущее время из Node.js (локальное)
+        const now = new Date();
+        // Форматируем для MySQL: YYYY-MM-DD HH:MM:SS
+        const nowStr = now.getFullYear() + '-' +
+                       String(now.getMonth() + 1).padStart(2, '0') + '-' +
+                       String(now.getDate()).padStart(2, '0') + ' ' +
+                       String(now.getHours()).padStart(2, '0') + ':' +
+                       String(now.getMinutes()).padStart(2, '0') + ':' +
+                       String(now.getSeconds()).padStart(2, '0');
+
+        const [events] = await pool.query(`
+            SELECT id, title, created_by 
+            FROM events 
+            WHERE status = 'approved' AND end_datetime < ?
+        `, [nowStr]);
+
+        console.log(`🔍 Найдено мероприятий для завершения: ${events.length}`);
+        if (events.length === 0) return;
+
+        for (const event of events) {
+            await pool.query('UPDATE events SET status = "completed" WHERE id = ?', [event.id]);
+
+            await createNotification(
+                event.created_by,
+                event.id,
+                'completed',
+                `Мероприятие "${event.title}" автоматически завершено.`
+            );
+
+            const [participants] = await pool.query(
+                'SELECT DISTINCT user_id FROM event_participants WHERE event_id = ?',
+                [event.id]
+            );
+            for (const p of participants) {
+                if (p.user_id !== event.created_by) {
+                    await createNotification(
+                        p.user_id,
+                        event.id,
+                        'completed',
+                        `Мероприятие "${event.title}" завершено.`
+                    );
+                }
+            }
+        }
+
+        mlog(`Автоматически завершено ${events.length} мероприятий.`);
+    } catch (error) {
+        mlog('[ERROR]', 'Ошибка при автоматическом завершении мероприятий', error);
+    }
+}
+
+// ===== ДОБАВЬТЕ ЭТИ СТРОКИ =====
+// Запуск cron-задачи каждый час в 00 минут
+cron.schedule('0 * * * *', autoCompleteEvents);
+console.log('✅ Cron-задача autoCompleteEvents зарегистрирована! Будет запускаться каждый час в 00 минут.');
+console.log(`⏰ Следующий запуск: ${new Date(new Date().setHours(new Date().getHours() + 1, 0, 0, 0)).toLocaleString()}`);
+// ===============================
 
 // ============================================================
 // ===== МАРШРУТЫ =====
@@ -1283,6 +1376,12 @@ app.get('/api/events/:id', isAuthenticated, async (req, res) => {
         mlog('[ERROR]', 'Ошибка получения мероприятия', error);
         res.status(500).json({ error: 'Ошибка сервера' });
     }
+});
+
+// ВРЕМЕННЫЙ МАРШРУТ ДЛЯ ТЕСТА
+app.get('/test-auto-complete', async (req, res) => {
+    await autoCompleteEvents();
+    res.send('Автоматическое завершение выполнено');
 });
 
 // ============================================================

@@ -48,9 +48,15 @@
                     <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
                         <li><span class="dropdown-item-text"><strong>{{user.role_name}}</strong></span></li>
                         <li><hr class="dropdown-divider"></li>
-                        {{#unless (eq user.type 5)}}
-                            <li><span class="dropdown-item-text"><small>Класс/Кафедра: {{#if user.kaf_name}}{{user.kaf_name}}{{else}}Не указан{{/if}}</small></span></li>
-                        {{/unless}}
+                        {{#if (eq user.type 1)}}
+                            <li><span class="dropdown-item-text"><small>Класс: {{#if user.kaf_name}}{{user.kaf_name}}{{else}}Не указан{{/if}}</small></span></li>
+                        {{/if}}
+                        {{#if (or (eq user.type 2) (eq user.type 3) (eq user.type 4))}}
+                            <li><span class="dropdown-item-text"><small>Кафедра: {{#if user.kaf_name}}{{user.kaf_name}}{{else}}Не указана{{/if}}</small></span></li>
+                        {{/if}}
+                        {{#if (eq user.type 6)}}
+                            <li><span class="dropdown-item-text"><small>Класс ребёнка: {{#if user.child_kaf_name}}{{user.child_kaf_name}}{{else}}Не указан{{/if}}</small></span></li>
+                        {{/if}}
                     </ul>
                 </div>
 
@@ -71,7 +77,15 @@
             <div class="mb-4">
                 <div class="fw-bold" style="font-size: 1.1rem;">{{user.name}}</div>
                 <div class="text-muted small">{{user.role_name}}</div>
-                <div class="text-muted small">Класс/Кафедра: {{#if user.kaf_name}}{{user.kaf_name}}{{else}}Не указан{{/if}}</div>
+                {{#if (eq user.type 1)}}
+                    <div class="text-muted small">Класс: {{#if user.kaf_name}}{{user.kaf_name}}{{else}}Не указан{{/if}}</div>
+                {{/if}}
+                {{#if (or (eq user.type 2) (eq user.type 3) (eq user.type 4))}}
+                    <div class="text-muted small">Кафедра: {{#if user.kaf_name}}{{user.kaf_name}}{{else}}Не указана{{/if}}</div>
+                {{/if}}
+                {{#if (eq user.type 6)}}
+                    <div class="text-muted small">Класс ребёнка: {{#if user.child_kaf_name}}{{user.child_kaf_name}}{{else}}Не указан{{/if}}</div>
+                {{/if}}
             </div>
             <hr>
 
