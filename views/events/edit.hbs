@@ -10,12 +10,12 @@
                     <!-- Основная информация -->
                     <div class="mb-3">
                         <label for="title" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Название *</label>
-                        <input type="text" class="form-control" id="title" name="title" value="{{event.title}}" placeholder="Введите название мероприятия" required>
+                        <input type="text" class="form-control" id="title" name="title" value="{{event.title}}" placeholder="Введите название мероприятия" maxlength="100" required>
                     </div>
                     
                     <div class="mb-3">
                         <label for="description" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Описание</label>
-                        <textarea class="form-control" id="description" name="description" rows="3" placeholder="Краткое описание мероприятия">{{event.description}}</textarea>
+                        <textarea class="form-control" id="description" name="description" rows="3" placeholder="Краткое описание мероприятия" maxlength="500">{{event.description}}</textarea>
                     </div>
                     
                     <div class="row g-3">
@@ -49,7 +49,7 @@
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label for="start_datetime" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Дата и время начала *</label>
-                                <input type="datetime-local" class="form-control" id="start_datetime" name="start_datetime" value="{{formatDateForInput event.start_datetime}}" required>
+                                <input type="datetime-local" class="form-control" id="start_datetime" name="start_datetime" value="{{formatDateForInput event.start_datetime}}" data-original-value="{{formatDateForInput event.start_datetime}}" required>
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -253,18 +253,31 @@
     </div>
 </div>
 
+<div id="data-container" 
+     data-classes='{{{json classes}}}' 
+     data-departments='{{{json departments}}}' 
+     data-users='{{{json users}}}'>
+</div>
+
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // ---------- АУДИТОРИЯ: переключение типов ----------
+        // ---------- Получение данных из data-атрибутов ----------
+        const container = document.getElementById('data-container');
+        const allClasses = JSON.parse(container.dataset.classes) || [];
+        const departments = JSON.parse(container.dataset.departments) || [];
+        const allUsers = JSON.parse(container.dataset.users) || [];
+
+        console.log('✅ Классы загружены (edit):', allClasses.length);
+        console.log('✅ Кафедры загружены (edit):', departments.length);
+        console.log('✅ Пользователи загружены (edit):', allUsers.length);
+
+        // ---------- Элементы DOM ----------
         const typeSelect = document.getElementById('target_audience_type');
         const selectContainer = document.getElementById('select_audience_container');
         const targetSelect = document.getElementById('target_audience_id');
         const specificUsersBlock = document.getElementById('specific_users_block');
         const multipleClassesBlock = document.getElementById('multiple_classes_block');
 
-        const allClasses = {{{json classes}}};
-        const departments = {{{json departments}}};
-        const allUsers = {{{json users}}};
         const initialSelectedIds = {{{json selectedIds}}} || []; // ID пользователей
         const initialClassIds = {{{json selectedClassIds}}} || []; // ID классов
 
@@ -524,7 +537,6 @@
                 multipleClassesBlock.style.display = 'block';
             } else {
                 selectContainer.style.display = 'block';
-                // Заполняем select для остальных типов
                 targetSelect.innerHTML = '<option value="">Выберите...</option>';
                 if (!type) {
                     targetSelect.innerHTML = '<option value="">Сначала выберите тип аудитории</option>';
@@ -532,11 +544,23 @@
                 }
                 let options = [];
                 if (type === 'class') {
+                    if (!allClasses || allClasses.length === 0) {
+                        targetSelect.innerHTML = '<option value="">Нет доступных классов</option>';
+                        return;
+                    }
                     options = allClasses.map(c => ({value: c.id, text: c.name}));
                 } else if (type === 'parallel') {
+                    if (!allClasses || allClasses.length === 0) {
+                        targetSelect.innerHTML = '<option value="">Нет данных для параллелей</option>';
+                        return;
+                    }
                     const parallels = [...new Set(allClasses.map(c => c.name.replace(/-.*$/, '')))].sort();
                     options = parallels.map(p => ({value: p, text: `${p} класс`}));
                 } else if (type === 'department') {
+                    if (!departments || departments.length === 0) {
+                        targetSelect.innerHTML = '<option value="">Нет доступных кафедр</option>';
+                        return;
+                    }
                     options = departments.map(d => ({value: d.id, text: d.name}));
                 } else if (type === 'all') {
                     targetSelect.innerHTML = '<option value="">Все пользователи системы</option>';
@@ -551,14 +575,146 @@
             }
         }
 
-        // Сохраняем текущее значение select для восстановления
-        const currentSelectValue = targetSelect.value;
-        if (currentSelectValue) {
-            targetSelect.dataset.currentValue = currentSelectValue;
+        typeSelect.addEventListener('change', updateAudienceControls);
+        updateAudienceControls();
+
+        // ===== ВАЛИДАЦИЯ ФОРМЫ =====
+        const form = document.getElementById('eventForm');
+
+        // 1. Обрезка полей при вводе и вставке
+        const titleInput = document.getElementById('title');
+        const descInput = document.getElementById('description');
+
+        function trimField(input, maxLength, fieldName) {
+            if (!input) return;
+            input.addEventListener('input', function() {
+                if (this.value.length > maxLength) {
+                    this.value = this.value.slice(0, maxLength);
+                }
+            });
+            input.addEventListener('paste', function(e) {
+                setTimeout(() => {
+                    if (this.value.length > maxLength) {
+                        this.value = this.value.slice(0, maxLength);
+                    }
+                }, 0);
+            });
+            input.addEventListener('drop', function(e) {
+                setTimeout(() => {
+                    if (this.value.length > maxLength) {
+                        this.value = this.value.slice(0, maxLength);
+                    }
+                }, 0);
+            });
         }
 
-        typeSelect.addEventListener('change', updateAudienceControls);
-        // Инициализация при загрузке
-        updateAudienceControls();
+        trimField(titleInput, 100, 'Название');
+        trimField(descInput, 500, 'Описание');
+
+        // 2. Проверка при отправке формы
+        if (form) {
+            form.addEventListener('submit', function(e) {
+                // Проверка названия
+                if (titleInput) {
+                    const title = titleInput.value.trim();
+                    if (title === '') {
+                        alert('Пожалуйста, введите название мероприятия.');
+                        e.preventDefault();
+                        return;
+                    }
+                    if (title.length > 100) {
+                        alert('Название не должно превышать 100 символов.');
+                        e.preventDefault();
+                        return;
+                    }
+                }
+
+                // Проверка описания
+                if (descInput) {
+                    const desc = descInput.value;
+                    if (desc.length > 500) {
+                        alert('Описание не должно превышать 500 символов.');
+                        e.preventDefault();
+                        return;
+                    }
+                }
+
+                // ===== ПРОВЕРКА АУДИТОРИИ =====
+                const audienceType = document.getElementById('target_audience_type').value;
+                const audienceSelect = document.getElementById('target_audience_id');
+
+                // Для class, parallel, department – проверяем, что выбран конкретный элемент
+                if (audienceType === 'class' || audienceType === 'parallel' || audienceType === 'department') {
+                    if (!audienceSelect || !audienceSelect.value) {
+                        alert('Пожалуйста, выберите аудиторию для мероприятия.');
+                        e.preventDefault();
+                        return;
+                    }
+                }
+
+                // Для specific_users – проверяем, что выбран хотя бы один пользователь
+                if (audienceType === 'specific_users') {
+                    const selectedIds = document.getElementById('selectedUsersIds');
+                    if (!selectedIds || !selectedIds.value || selectedIds.value.split(',').filter(id => id).length === 0) {
+                        alert('Пожалуйста, выберите хотя бы одного пользователя.');
+                        e.preventDefault();
+                        return;
+                    }
+                }
+
+                // Для multiple_classes – проверяем, что выбран хотя бы один класс
+                if (audienceType === 'multiple_classes') {
+                    const selectedClasses = document.getElementById('selectedClassesIds');
+                    if (!selectedClasses || !selectedClasses.value || selectedClasses.value.split(',').filter(id => id).length === 0) {
+                        alert('Пожалуйста, выберите хотя бы один класс.');
+                        e.preventDefault();
+                        return;
+                    }
+                }
+
+                // ===== ПРОВЕРКА ДАТ =====
+                const startInput = document.getElementById('start_datetime');
+                const endInput = document.getElementById('end_datetime');
+                if (!startInput || !endInput) return;
+
+                const startVal = startInput.value;
+                const endVal = endInput.value;
+                const originalStart = startInput.dataset.originalValue || null;
+
+                if (!startVal || !endVal) {
+                    alert('Пожалуйста, заполните дату и время начала и окончания.');
+                    e.preventDefault();
+                    return;
+                }
+
+                const startDate = new Date(startVal);
+                const endDate = new Date(endVal);
+                const now = new Date();
+
+                if (startDate >= endDate) {
+                    alert('Дата начала должна быть раньше даты окончания.');
+                    e.preventDefault();
+                    return;
+                }
+
+                // Проверка на прошедшую дату (сравниваем timestamp)
+                if (startDate < now) {
+                    let isOriginal = false;
+                    if (originalStart) {
+                        const originalDate = new Date(originalStart);
+                        // Сравниваем timestamp (миллисекунды) – надёжнее строк
+                        if (originalDate.getTime() === startDate.getTime()) {
+                            isOriginal = true;
+                        }
+                    }
+            
+                    if (!isOriginal) {
+                        alert('Дата начала не может быть в прошлом.');
+                        e.preventDefault();
+                        return;
+                    }
+                }
+            });
+        }
     });
 </script>

@@ -178,6 +178,14 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner) {
         return;
     }
 
+    // ---- ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ ОБРЕЗКИ ТЕКСТА ----
+    function truncateText(text, maxLength = 300) {
+        if (!text) return '';
+        if (text.length <= maxLength) return text;
+        return text.slice(0, maxLength) + '...';
+    }
+    // --------------------------------------------------
+
     // Статусы
     const statusColors = {
         pending: 'warning',
@@ -196,7 +204,7 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner) {
     const statusColor = statusColors[props.status] || 'secondary';
     const statusText = statusTexts[props.status] || props.status;
 
-    modalTitle.textContent = `📌 ${event.title}`;
+    modalTitle.textContent = `📌 ${truncateText(event.title, 80)}`; // тоже обрезаем название, если длинное
 
     const isRegistrationEnabled = props.is_registration_enabled === 1 || props.is_registration_enabled === true;
     const showParticipants = isOwner || isAdmin;
@@ -225,15 +233,15 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner) {
                 ${props.location ? `
                     <div class="mb-2" style="display: flex; align-items: baseline; gap: 0.5rem;">
                         <span style="font-weight: 600; color: #172033; min-width: 110px;">📍 Место:</span>
-                        <span>${props.location}</span>
+                        <span title="${props.location.replace(/"/g, '&quot;')}">${truncateText(props.location, 80)}</span>
                     </div>
                 ` : ''}
 
-                <!-- Описание -->
+                <!-- Описание (ОБРЕЗАНО ДО 300 СИМВОЛОВ) -->
                 ${props.description ? `
                     <div class="mb-2" style="display: flex; align-items: flex-start; gap: 0.5rem;">
                         <span style="font-weight: 600; color: #172033; min-width: 110px;">📝 Описание:</span>
-                        <span>${props.description}</span>
+                        <span title="${props.description.replace(/"/g, '&quot;')}">${truncateText(props.description, 300)}</span>
                     </div>
                 ` : ''}
 
@@ -259,7 +267,7 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner) {
                     <span>${props.creator || 'Неизвестен'}</span>
                 </div>
 
-                <!-- Аудитория (добавлена поддержка multiple_classes) -->
+                <!-- Аудитория -->
                 <div class="mb-2" style="display: flex; align-items: baseline; gap: 0.5rem;">
                     <span style="font-weight: 600; color: #172033; min-width: 110px;">🎯 Аудитория:</span>
                     <span>${props.target_audience_type === 'all' ? 'Все пользователи' :

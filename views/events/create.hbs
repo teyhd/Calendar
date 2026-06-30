@@ -10,12 +10,12 @@
                     <!-- Основная информация -->
                     <div class="mb-3">
                         <label for="title" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Название *</label>
-                        <input type="text" class="form-control" id="title" name="title" placeholder="Введите название мероприятия" required>
+                        <input type="text" class="form-control" id="title" name="title" placeholder="Введите название мероприятия" maxlength="100" required>
                     </div>
                     
                     <div class="mb-3">
                         <label for="description" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Описание</label>
-                        <textarea class="form-control" id="description" name="description" rows="3" placeholder="Краткое описание мероприятия"></textarea>
+                        <textarea class="form-control" id="description" name="description" rows="3" placeholder="Краткое описание мероприятия" maxlength="500"></textarea>
                     </div>
                     
                     <div class="row g-3">
@@ -256,20 +256,31 @@
         </div>
     </div>
 </div>
+<div id="data-container" 
+     data-classes='{{{json classes}}}' 
+     data-departments='{{{json departments}}}' 
+     data-users='{{{json users}}}'>
+</div>
 
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // ---------- Данные ----------
+    // ---------- Получение данных из data-атрибутов ----------
+    const container = document.getElementById('data-container');
+    const allClasses = JSON.parse(container.dataset.classes) || [];
+    const departments = JSON.parse(container.dataset.departments) || [];
+    const allUsers = JSON.parse(container.dataset.users) || [];
+
+    console.log('✅ Классы загружены:', allClasses.length);
+    console.log('✅ Кафедры загружены:', departments.length);
+    console.log('✅ Пользователи загружены:', allUsers.length);
+
+    // ---------- Элементы DOM ----------
     const typeSelect = document.getElementById('target_audience_type');
     const selectContainer = document.getElementById('select_audience_container');
     const targetSelect = document.getElementById('target_audience_id');
     const specificUsersBlock = document.getElementById('specific_users_block');
     const multipleClassesBlock = document.getElementById('multiple_classes_block');
-
-    const allClasses = {{{json classes}}}; // массив {id, name}
-    const departments = {{{json departments}}};
-    const allUsers = {{{json users}}};     // массив {id, name, type}
 
     // ========== ЧИПСЫ ДЛЯ КЛАССОВ ==========
     const classSearchInput = document.getElementById('classSearchInput');
@@ -378,9 +389,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // ========== ЧИПСЫ ДЛЯ ПОЛЬЗОВАТЕЛЕЙ ==========
-    // (оставляем ваш существующий код, только переименуйте переменные, чтобы не было конфликтов)
-    // У вас уже есть searchInput, resultsContainer, selectedContainer, hiddenInput, selectedUsers
-    // Я их переименую для ясности:
     const userSearchInput = document.getElementById('userSearchInput');
     const userResults = document.getElementById('searchResults');
     const selectedUsersContainer = document.getElementById('selectedUsersContainer');
@@ -493,7 +501,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // ========== УПРАВЛЕНИЕ ВИДИМОСТЬЮ ==========
     function updateAudienceControls() {
         const type = typeSelect.value;
-        // Скрываем все блоки
         selectContainer.style.display = 'none';
         specificUsersBlock.style.display = 'none';
         multipleClassesBlock.style.display = 'none';
@@ -504,7 +511,6 @@ document.addEventListener('DOMContentLoaded', function() {
             multipleClassesBlock.style.display = 'block';
         } else {
             selectContainer.style.display = 'block';
-            // Заполняем select для остальных типов
             targetSelect.innerHTML = '<option value="">Выберите...</option>';
             if (!type) {
                 targetSelect.innerHTML = '<option value="">Сначала выберите тип аудитории</option>';
@@ -512,11 +518,23 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             let options = [];
             if (type === 'class') {
+                if (!allClasses || allClasses.length === 0) {
+                    targetSelect.innerHTML = '<option value="">Нет доступных классов</option>';
+                    return;
+                }
                 options = allClasses.map(c => ({value: c.id, text: c.name}));
             } else if (type === 'parallel') {
+                if (!allClasses || allClasses.length === 0) {
+                    targetSelect.innerHTML = '<option value="">Нет данных для параллелей</option>';
+                    return;
+                }
                 const parallels = [...new Set(allClasses.map(c => c.name.replace(/-.*$/, '')))].sort();
                 options = parallels.map(p => ({value: p, text: `${p} класс`}));
             } else if (type === 'department') {
+                if (!departments || departments.length === 0) {
+                    targetSelect.innerHTML = '<option value="">Нет доступных кафедр</option>';
+                    return;
+                }
                 options = departments.map(d => ({value: d.id, text: d.name}));
             } else if (type === 'all') {
                 targetSelect.innerHTML = '<option value="">Все пользователи системы</option>';
@@ -534,39 +552,165 @@ document.addEventListener('DOMContentLoaded', function() {
     typeSelect.addEventListener('change', updateAudienceControls);
     updateAudienceControls();
 
-        // ---------- НАГРАДЫ (логика показа) ----------
-        const enableCheckbox = document.getElementById('enable_rewards');
-        const rewardsBlock = document.getElementById('rewards_block');
-        const rewardTypeSelect = document.getElementById('reward_type');
-        const placesBlock = document.getElementById('places_block');
-        const rewardDescription = document.getElementById('reward_description');
+    // ---------- НАГРАДЫ (логика показа) ----------
+    const enableCheckbox = document.getElementById('enable_rewards');
+    const rewardsBlock = document.getElementById('rewards_block');
+    const rewardTypeSelect = document.getElementById('reward_type');
+    const placesBlock = document.getElementById('places_block');
+    const rewardDescription = document.getElementById('reward_description');
 
-        function updateRewardsUI() {
-            if (enableCheckbox.checked) {
-                rewardsBlock.style.display = 'block';
-                updateRewardDescription();
-            } else {
-                rewardsBlock.style.display = 'none';
-            }
+    function updateRewardsUI() {
+        if (enableCheckbox.checked) {
+            rewardsBlock.style.display = 'block';
+            updateRewardDescription();
+        } else {
+            rewardsBlock.style.display = 'none';
         }
+    }
 
-        function updateRewardDescription() {
-            const type = rewardTypeSelect.value;
-            const places = document.getElementById('places_count').value;
-            if (type === 'educational') {
-                rewardDescription.textContent = '📖 Учебное: все участники получат по 10 очков';
-                placesBlock.style.display = 'none';
-            } else {
-                rewardDescription.textContent = `🏅 Соревновательное: участники распределят ${places} призовых мест (1 место — 50 очков, 2 место — 30 очков, 3 место — 20 очков, участники — 10 очков)`;
-                placesBlock.style.display = 'block';
-            }
+    function updateRewardDescription() {
+        const type = rewardTypeSelect.value;
+        const places = document.getElementById('places_count').value;
+        if (type === 'educational') {
+            rewardDescription.textContent = '📖 Учебное: все участники получат по 10 очков';
+            placesBlock.style.display = 'none';
+        } else {
+            rewardDescription.textContent = `🏅 Соревновательное: участники распределят ${places} призовых мест (1 место — 50 очков, 2 место — 30 очков, 3 место — 20 очков, участники — 10 очков)`;
+            placesBlock.style.display = 'block';
         }
+    }
 
-        enableCheckbox.addEventListener('change', updateRewardsUI);
-        rewardTypeSelect.addEventListener('change', updateRewardDescription);
-        document.getElementById('places_count').addEventListener('change', updateRewardDescription);
+    enableCheckbox.addEventListener('change', updateRewardsUI);
+    rewardTypeSelect.addEventListener('change', updateRewardDescription);
+    document.getElementById('places_count').addEventListener('change', updateRewardDescription);
 
-        updateRewardsUI();
-        updateRewardDescription();
-    });
+    updateRewardsUI();
+    updateRewardDescription();
+
+    // ===== ВАЛИДАЦИЯ ФОРМЫ =====
+    const form = document.getElementById('eventForm');
+
+    // 1. Обрезка полей при вводе и вставке
+    const titleInput = document.getElementById('title');
+    const descInput = document.getElementById('description');
+
+    function trimField(input, maxLength, fieldName) {
+        if (!input) return;
+        input.addEventListener('input', function() {
+            if (this.value.length > maxLength) {
+                this.value = this.value.slice(0, maxLength);
+            }
+        });
+        input.addEventListener('paste', function(e) {
+            setTimeout(() => {
+                if (this.value.length > maxLength) {
+                    this.value = this.value.slice(0, maxLength);
+                }
+            }, 0);
+        });
+        input.addEventListener('drop', function(e) {
+            setTimeout(() => {
+                if (this.value.length > maxLength) {
+                    this.value = this.value.slice(0, maxLength);
+                }
+            }, 0);
+        });
+    }
+
+    trimField(titleInput, 100, 'Название');
+    trimField(descInput, 500, 'Описание');
+
+    // 2. Проверка при отправке формы
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            // Проверка названия
+            if (titleInput) {
+                const title = titleInput.value.trim();
+                if (title === '') {
+                    alert('Пожалуйста, введите название мероприятия.');
+                    e.preventDefault();
+                    return;
+                }
+                if (title.length > 100) {
+                    alert('Название не должно превышать 100 символов.');
+                    e.preventDefault();
+                    return;
+                }
+            }
+
+            // Проверка описания
+            if (descInput) {
+                const desc = descInput.value;
+                if (desc.length > 500) {
+                    alert('Описание не должно превышать 500 символов.');
+                    e.preventDefault();
+                    return;
+                }
+            }
+
+            // ===== ПРОВЕРКА АУДИТОРИИ =====
+            const audienceType = document.getElementById('target_audience_type').value;
+            const audienceSelect = document.getElementById('target_audience_id');
+
+            // Для class, parallel, department – проверяем, что выбран конкретный элемент
+            if (audienceType === 'class' || audienceType === 'parallel' || audienceType === 'department') {
+                if (!audienceSelect || !audienceSelect.value) {
+                    alert('Пожалуйста, выберите аудиторию для мероприятия.');
+                    e.preventDefault();
+                    return;
+                }
+            }
+
+            // Для specific_users – проверяем, что выбран хотя бы один пользователь
+            if (audienceType === 'specific_users') {
+                const selectedIds = document.getElementById('selectedUsersIds');
+                if (!selectedIds || !selectedIds.value || selectedIds.value.split(',').filter(id => id).length === 0) {
+                    alert('Пожалуйста, выберите хотя бы одного пользователя.');
+                    e.preventDefault();
+                    return;
+                }
+            }
+
+            // Для multiple_classes – проверяем, что выбран хотя бы один класс
+            if (audienceType === 'multiple_classes') {
+                const selectedClasses = document.getElementById('selectedClassesIds');
+                if (!selectedClasses || !selectedClasses.value || selectedClasses.value.split(',').filter(id => id).length === 0) {
+                    alert('Пожалуйста, выберите хотя бы один класс.');
+                    e.preventDefault();
+                    return;
+                }
+            }
+
+            // Проверка дат
+            const startInput = document.getElementById('start_datetime');
+            const endInput = document.getElementById('end_datetime');
+            if (!startInput || !endInput) return;
+
+            const startVal = startInput.value;
+            const endVal = endInput.value;
+
+            if (!startVal || !endVal) {
+                alert('Пожалуйста, заполните дату и время начала и окончания.');
+                e.preventDefault();
+                return;
+            }
+
+            const startDate = new Date(startVal);
+            const endDate = new Date(endVal);
+            const now = new Date();
+
+            if (startDate >= endDate) {
+                alert('Дата начала должна быть раньше даты окончания.');
+                e.preventDefault();
+                return;
+            }
+
+            if (startDate < now) {
+                alert('Дата начала не может быть в прошлом.');
+                e.preventDefault();
+                return;
+            }
+        });
+    }
+});
 </script>

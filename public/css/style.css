@@ -722,3 +722,20 @@ h1 {
 .navbar .navbar-nav .notifications-dropdown .text-center {
     font-weight: 600;
 }
+
+/* Перенос длинных слов в модалке */
+#eventModal .modal-body p,
+#eventModal .modal-body div,
+#eventModal .modal-body span {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    max-width: 100%;
+}
+
+.card-text {
+    display: -webkit-box;
+    -webkit-line-clamp: 3; /* 3 строки */
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
