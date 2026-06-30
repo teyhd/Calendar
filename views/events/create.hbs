@@ -164,13 +164,8 @@
                                     <div class="col-md-6" id="places_block">
                                         <div class="mb-3">
                                             <label for="places_count" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Количество призовых мест</label>
-                                            <select class="form-select" id="places_count" name="places_count">
-                                                <option value="1">1 место</option>
-                                                <option value="2">2 места</option>
-                                                <option value="3" selected>3 места</option>
-                                                <option value="4">4 места</option>
-                                                <option value="5">5 мест</option>
-                                            </select>
+                                            <input type="number" class="form-control" id="places_count" name="places_count" min="1" max="100" value="3" step="1">
+                                            <div class="form-text text-muted small">Введите число от 1 до 100</div>
                                         </div>
                                     </div>
                                 </div>

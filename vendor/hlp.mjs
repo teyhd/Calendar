@@ -14,6 +14,11 @@ export function registerHelpers(handlebarsInstance) {
     hbs.registerHelper('or', function(a, b) {
         return a || b;
     });
+
+    // Хелпер "не равно"
+    hbs.registerHelper('ne', function(a, b) {
+        return a !== b;
+    });
     
     hbs.registerHelper('formatDate', (date) => {
         if (!date) return '';

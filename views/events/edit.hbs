@@ -159,6 +159,55 @@
                         </div>
                     </div>
 
+                    <!-- Блок: Награды -->
+                    <div class="block-outline border-warning mb-3">
+                        <div class="card-header bg-transparent border-bottom-0 pt-2 pb-0 px-0">
+                            <h6 class="mb-0 fw-semibold" style="color: var(--dark-gray, #172033);">🏆 Награды за участие (опционально)</h6>
+                        </div>
+                        <div class="card-body px-0 pb-0">
+                            <div class="form-check mb-3">
+                                <input class="form-check-input form-check-input-lg" type="checkbox" id="enable_rewards" name="enable_rewards" value="1" {{#if (ne event.reward_type "none")}}checked{{/if}}>
+                                <label class="form-check-label form-check-label-lg" for="enable_rewards">
+                                    Начислять очки за участие
+                                </label>
+                            </div>
+        
+                            <div id="rewards_block" style="{{#if (ne event.reward_type "none")}}display:block;{{else}}display:none;{{/if}}">
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="reward_type" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Тип события</label>
+                                            <select class="form-select" id="reward_type" name="reward_type">
+                                                <option value="educational" {{#if (eq event.reward_type "educational")}}selected{{/if}}>📖 Учебное (всем участникам очки)</option>
+                                                <option value="competitive" {{#if (eq event.reward_type "competitive")}}selected{{/if}}>🏅 Соревновательное (распределение мест)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6" id="places_block" style="{{#if (eq event.reward_type "competitive")}}display:block;{{else}}display:none;{{/if}}">
+                                        <div class="mb-3">
+                                            <label for="places_count" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Количество призовых мест</label>
+                                            <input type="number" class="form-control" id="places_count" name="places_count" min="1" max="100" value="{{event.reward_places}}" step="1">
+                                            <div class="form-text text-muted small">Введите число от 1 до 100</div>
+                                        </div>
+                                    </div>
+                                </div>
+            
+                                <div class="alert alert-info border-0 small">
+                                    <p class="mb-0">
+                                        <strong>Как будут начисляться очки:</strong><br>
+                                        <span id="reward_description">
+                                            {{#if (eq event.reward_type "competitive")}}
+                                                🏅 Соревновательное: участники распределят {{event.reward_places}} призовых мест (1 место — 50 очков, 2 место — 30 очков, 3 место — 20 очков, участники — 10 очков)
+                                            {{else}}
+                                                📖 Учебное: все участники получат по 10 очков
+                                            {{/if}}
+                                        </span>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Для администратора -->
                     {{#ifTeacher}}
                     <div class="mb-3 form-check">

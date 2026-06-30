@@ -340,7 +340,8 @@ app.post('/events/create', isAuthenticated, async (req, res) => {
         title, description, event_type_id, department_id, subject_id,
         start_datetime, end_datetime, location, level,
         target_audience_type, target_audience_id, target_audience_ids,
-        is_admin_event, is_registration_enabled 
+        is_admin_event, is_registration_enabled, enable_rewards,
+        reward_type, places_count
     } = req.body;
 
     console.log('target_audience_type:', target_audience_type);
@@ -363,19 +364,32 @@ app.post('/events/create', isAuthenticated, async (req, res) => {
         isAdminEvent = 0;
     }
 
+    // === ОБРАБОТКА НАГРАД ===
+    let rewardType = 'none';
+    let rewardPlaces = null;
+    if (enable_rewards) {
+        rewardType = reward_type || 'educational';
+        if (rewardType === 'competitive') {
+            rewardPlaces = parseInt(places_count) || 3;
+        }
+    }
+
     try {
         const [result] = await pool.query(
             `INSERT INTO events (
                 title, description, event_type_id, department_id, subject_id,
                 start_datetime, end_datetime, location, level, status,
-                target_audience_type, target_audience_id, is_admin_event, is_registration_enabled, created_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`,
+                target_audience_type, target_audience_id, is_admin_event, is_registration_enabled,
+                reward_type, reward_places, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)`,
             [
                 title, description, event_type_id, department_id || null, subject_id || null,
                 start_datetime, end_datetime, location, level || 'school',
                 target_audience_type, targetAudienceId,
                 isAdminEvent,
                 is_registration_enabled ? 1 : 0,
+                rewardType,
+                rewardPlaces,
                 req.session.user.id
             ]
         );
@@ -454,13 +468,15 @@ app.get('/events/edit/:id', isAuthenticated, async (req, res) => {
         res.status(500).send('Ошибка сервера');
     }
 });
+
 app.post('/events/edit/:id', isAuthenticated, async (req, res) => {
     const eventId = req.params.id;
     const {
         title, description, event_type_id, department_id, subject_id,
         start_datetime, end_datetime, location, level,
         target_audience_type, target_audience_id, target_audience_ids,
-        is_admin_event, is_registration_enabled 
+        is_admin_event, is_registration_enabled, enable_rewards,
+        reward_type, places_count
     } = req.body;
 
     try {
@@ -476,7 +492,6 @@ app.post('/events/edit/:id', isAuthenticated, async (req, res) => {
         // Преобразуем target_audience_id в зависимости от типа
         let targetAudienceId = null;
         if (target_audience_type === 'specific_users' || target_audience_type === 'multiple_classes') {
-            // Для multiple_classes и specific_users используем поле target_audience_ids
             targetAudienceId = target_audience_ids || null;
             if (Array.isArray(targetAudienceId)) {
                 targetAudienceId = targetAudienceId.filter(id => id).join(',');
@@ -485,10 +500,20 @@ app.post('/events/edit/:id', isAuthenticated, async (req, res) => {
             targetAudienceId = target_audience_id || null;
         }
 
-        // Принудительно сбрасываем is_admin_event для учеников и родителей
+        // is_admin_event
         let isAdminEvent = is_admin_event ? 1 : 0;
         if (![2, 3, 4, 5].includes(req.session.user.type)) {
             isAdminEvent = 0;
+        }
+
+        // === ОБРАБОТКА НАГРАД ===
+        let rewardType = 'none';
+        let rewardPlaces = null;
+        if (enable_rewards) {
+            rewardType = reward_type || 'educational';
+            if (rewardType === 'competitive') {
+                rewardPlaces = parseInt(places_count) || 3;
+            }
         }
 
         await pool.query(
@@ -496,6 +521,7 @@ app.post('/events/edit/:id', isAuthenticated, async (req, res) => {
                 title = ?, description = ?, event_type_id = ?, department_id = ?, subject_id = ?,
                 start_datetime = ?, end_datetime = ?, location = ?, level = ?,
                 target_audience_type = ?, target_audience_id = ?, is_admin_event = ?, is_registration_enabled = ?,
+                reward_type = ?, reward_places = ?,
                 status = 'pending', approved_by = NULL, rejection_reason = NULL
              WHERE id = ?`,
             [
@@ -504,6 +530,8 @@ app.post('/events/edit/:id', isAuthenticated, async (req, res) => {
                 target_audience_type, targetAudienceId,
                 isAdminEvent,
                 is_registration_enabled ? 1 : 0,
+                rewardType,
+                rewardPlaces,
                 eventId
             ]
         );
