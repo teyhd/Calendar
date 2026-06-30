@@ -400,7 +400,7 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner) {
     // Кнопка "Отменить" (для approved, организатор или админ)
     if ((isOwner || isAdmin) && props.status === 'approved') {
         footerButtons += `
-            <button type="button" class="btn btn-warning" onclick="cancelEvent(${event.id})">
+            <button type="button" class="btn btn-danger" onclick="cancelEvent(${event.id})">
                 ❌ Отменить мероприятие
             </button>
         `;

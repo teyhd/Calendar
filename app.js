@@ -41,8 +41,13 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(session({
     secret: process.env.SESSION_SECRET || 'default_secret',
     resave: false,
-    saveUninitialized: true,
-    cookie: { secure: false, maxAge: 3600000 }
+    saveUninitialized: false,        // не создаём сессию до логина
+    cookie: {
+        httpOnly: true,               // защита от XSS
+        sameSite: 'lax',              // защита от CSRF (частичная)
+        secure: process.env.NODE_ENV === 'production', // true для HTTPS
+        maxAge: 1000 * 60 * 60 * 24   // 24 часа
+    }
 }));
 
 // Middleware для уведомлений
@@ -590,6 +595,62 @@ app.get('/my-events', isAuthenticated, async (req, res) => {
     }
 });
 
+// ----- Мероприятия ребёнка (для родителей) -----
+app.get('/child-events', isAuthenticated, async (req, res) => {
+    const parentId = req.session.user.id;
+    const userType = req.session.user.type;
+
+    if (userType !== 6) {
+        return res.status(403).send('Доступ запрещён');
+    }
+
+    try {
+        const [children] = await pool.query(
+            `SELECT student_id FROM parent_student WHERE parent_id = ?`,
+            [parentId]
+        );
+
+        if (children.length === 0) {
+            return res.render('events/child-events', {
+                title: 'Мероприятия ребёнка',
+                events: [],
+                message: 'У вас ещё нет привязанных детей.'
+            });
+        }
+
+        const childIds = children.map(c => c.student_id);
+        const placeholders = childIds.map(() => '?').join(',');
+
+        // Параметры для запроса: дважды повторяем childIds (для ep.user_id и e.created_by)
+        const params = [...childIds, ...childIds];
+
+        const [events] = await pool.query(`
+            SELECT DISTINCT e.*,
+                   u.name as creator_name,
+                   et.name as type_name,
+                   e.is_registration_enabled,
+                   s.name as student_name
+            FROM events e
+            LEFT JOIN users u ON e.created_by = u.id
+            LEFT JOIN event_types et ON e.event_type_id = et.id
+            LEFT JOIN event_participants ep ON e.id = ep.event_id
+            LEFT JOIN users s ON ep.user_id = s.id
+            WHERE (ep.user_id IN (${placeholders}) OR e.created_by IN (${placeholders}))
+              AND e.status IN ('approved', 'completed', 'canceled', 'pending')
+            ORDER BY e.start_datetime DESC
+        `, params);
+
+        res.render('events/child-events', {
+            title: 'Мероприятия ребёнка',
+            events: events,
+            message: null
+        });
+    } catch (error) {
+        mlog('[ERROR]', 'Ошибка загрузки мероприятий ребёнка', error);
+        res.status(500).send('Ошибка сервера');
+    }
+});
+
 // ----- Модерация -----
 app.get('/events/moderation', isAdmin, async (req, res) => {
     try {
@@ -753,7 +814,6 @@ app.get('/api/events', isAuthenticated, async (req, res) => {
         `;
         params.push(user.id, user.type);
 
-        // Фильтр по аудитории для не-админов
         if (user.type !== 5) {
             visibilityCondition += `
                 AND (
@@ -772,15 +832,81 @@ app.get('/api/events', isAuthenticated, async (req, res) => {
                             OR (e.target_audience_type = 'class' AND e.target_audience_id = ?)
                             OR (e.target_audience_type = 'multiple_classes' AND FIND_IN_SET(?, e.target_audience_id))
                             OR (e.target_audience_type = 'specific_users' AND FIND_IN_SET(?, e.target_audience_id))
+                            OR (e.target_audience_type = 'parallel' AND e.target_audience_id = (
+                                SELECT CAST(SUBSTRING_INDEX(name, '-', 1) AS UNSIGNED) 
+                                FROM kaf_name 
+                                WHERE id = ?
+                            ))
                         )
                     )
                 `;
-                params.push(user.kaf, user.kaf, user.id);
+                params.push(user.kaf, user.kaf, user.id, user.kaf);
             } else if (user.type === 6) { // Родитель
-                // Родитель видит все утверждённые мероприятия (можно добавить фильтр по детям позже)
-                visibilityCondition += `
-                    OR (e.status = 'approved')
-                `;
+                // Получаем детей родителя
+                const [children] = await pool.query(
+                    `SELECT student_id FROM parent_student WHERE parent_id = ?`,
+                    [user.id]
+                );
+                if (children.length > 0) {
+                    const childIds = children.map(c => c.student_id);
+                    const [childUsers] = await pool.query(
+                        `SELECT id, kaf FROM users WHERE id IN (?)`,
+                        [childIds]
+                    );
+                    let childConditions = [];
+                    let childParams = [];
+
+                    // Мероприятия для всех
+                    childConditions.push(`e.target_audience_type = 'all'`);
+
+                    // Созданные ребёнком
+                    const childIdsPlaceholders = childIds.map(() => '?').join(',');
+                    childConditions.push(`e.created_by IN (${childIdsPlaceholders})`);
+                    childParams.push(...childIds);
+
+                    // Участие ребёнка
+                    childConditions.push(`EXISTS (SELECT 1 FROM event_participants ep WHERE ep.event_id = e.id AND ep.user_id IN (${childIdsPlaceholders}))`);
+                    childParams.push(...childIds);
+
+                    // Класс
+                    const kafList = childUsers.map(u => u.kaf).filter(k => k !== null);
+                    if (kafList.length) {
+                        const kafPlaceholders = kafList.map(() => '?').join(',');
+                        childConditions.push(`(e.target_audience_type = 'class' AND e.target_audience_id IN (${kafPlaceholders}))`);
+                        childParams.push(...kafList);
+
+                        // Параллель
+                        const [parallels] = await pool.query(`
+                            SELECT DISTINCT CAST(SUBSTRING_INDEX(name, '-', 1) AS UNSIGNED) as parallel 
+                            FROM kaf_name 
+                            WHERE id IN (${kafPlaceholders})
+                        `, kafList);
+                        const parallelList = parallels.map(p => p.parallel).filter(p => p !== null);
+                        if (parallelList.length) {
+                            const parallelPlaceholders = parallelList.map(() => '?').join(',');
+                            childConditions.push(`(e.target_audience_type = 'parallel' AND e.target_audience_id IN (${parallelPlaceholders}))`);
+                            childParams.push(...parallelList);
+                        }
+
+                        // Несколько классов
+                        const multipleConditions = kafList.map(() => `FIND_IN_SET(?, e.target_audience_id)`).join(' OR ');
+                        childConditions.push(`(e.target_audience_type = 'multiple_classes' AND (${multipleConditions}))`);
+                        childParams.push(...kafList);
+                    }
+
+                    // Конкретные пользователи
+                    const specificConditions = childIds.map(() => `FIND_IN_SET(?, e.target_audience_id)`).join(' OR ');
+                    childConditions.push(`(e.target_audience_type = 'specific_users' AND (${specificConditions}))`);
+                    childParams.push(...childIds);
+
+                    if (childConditions.length) {
+                        const combined = childConditions.join(' OR ');
+                        visibilityCondition += `
+                            OR (e.status = 'approved' AND (${combined}))
+                        `;
+                        params.push(...childParams);
+                    }
+                }
             } else if ([2, 3, 4].includes(user.type)) { // Учитель, Наставник, Тьютор
                 visibilityCondition += `
                     OR (
@@ -799,12 +925,10 @@ app.get('/api/events', isAuthenticated, async (req, res) => {
 
         sql += ` AND (${visibilityCondition})`;
 
-        // Скрываем админские события от учеников и родителей
         if ([1, 6].includes(user.type)) {
             sql += ' AND e.is_admin_event = 0';
         }
 
-        // Фильтры
         if (status !== 'all') {
             sql += ' AND e.status = ?';
             params.push(status);

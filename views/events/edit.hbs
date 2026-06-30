@@ -44,30 +44,6 @@
                         </div>
                     </div>
                     
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="department_id" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Кафедра</label>
-                                <select class="form-select" id="department_id" name="department_id">
-                                    <option value="">Не выбрано</option>
-                                    {{#each departments}}
-                                        <option value="{{id}}" {{#if (eq ../event.department_id id)}}selected{{/if}}>{{name}}</option>
-                                    {{/each}}
-                                </select>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="subject_id" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Предмет</label>
-                                <select class="form-select" id="subject_id" name="subject_id">
-                                    <option value="">Не выбрано</option>
-                                    {{#each subjects}}
-                                        <option value="{{id}}" {{#if (eq ../event.subject_id id)}}selected{{/if}} data-department="{{department_id}}">{{name}}</option>
-                                    {{/each}}
-                                </select>
-                            </div>
-                        </div>
-                    </div>
                     
                     <div class="row g-3">
                         <div class="col-md-6">

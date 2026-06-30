@@ -94,6 +94,14 @@
                     </a>
                 </li>
 
+                {{#ifEquals user.type 6}}
+                    <li class="nav-item">
+                        <a class="nav-link" href="/child-events">
+                            <i class="bi bi-people me-2"></i> Мероприятия ребёнка
+                        </a>
+                    </li>
+                {{/ifEquals}}
+
                 {{#ifTeacher}}
                     <li class="nav-item">
                         <a class="nav-link" href="/events/create">
