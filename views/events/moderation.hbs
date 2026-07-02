@@ -38,7 +38,7 @@
                                     ✅ Утвердить
                                 </button>
                             </form>
-                            <button type="button" class="btn btn-danger btn-sm fw-semibold" onclick="rejectEvent({{id}}); event.stopPropagation();">
+                            <button type="button" class="btn btn-danger btn-sm fw-semibold" onclick="openReasonModal({{id}}, 'reject', '/events/moderation/{{id}}')">
                                 ❌ Отклонить
                             </button>
                         </div>
@@ -54,28 +54,3 @@
     </div>
 {{/if}}
 
-<script>
-    function rejectEvent(eventId) {
-        const reason = prompt('Укажите причину отклонения:');
-        if (reason !== null) {
-            const form = document.createElement('form');
-            form.method = 'POST';
-            form.action = `/events/moderation/${eventId}`;
-            
-            const actionInput = document.createElement('input');
-            actionInput.type = 'hidden';
-            actionInput.name = 'action';
-            actionInput.value = 'reject';
-            
-            const reasonInput = document.createElement('input');
-            reasonInput.type = 'hidden';
-            reasonInput.name = 'rejection_reason';
-            reasonInput.value = reason || 'Без указания причины';
-            
-            form.appendChild(actionInput);
-            form.appendChild(reasonInput);
-            document.body.appendChild(form);
-            form.submit();
-        }
-    }
-</script>

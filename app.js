@@ -208,12 +208,106 @@ async function autoCompleteEvents() {
     }
 }
 
-// ===== ДОБАВЬТЕ ЭТИ СТРОКИ =====
+// ===== ОТПРАВКА НАПОМИНАНИЙ О МЕРОПРИЯТИЯХ =====
+async function sendEventReminders() {
+    try {
+        // Текущее время + 1 час
+        const now = new Date();
+        const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
+        
+        // Форматируем для MySQL
+        const formatMySQL = (date) => {
+            return date.getFullYear() + '-' +
+                   String(date.getMonth() + 1).padStart(2, '0') + '-' +
+                   String(date.getDate()).padStart(2, '0') + ' ' +
+                   String(date.getHours()).padStart(2, '0') + ':' +
+                   String(date.getMinutes()).padStart(2, '0') + ':' +
+                   String(date.getSeconds()).padStart(2, '0');
+        };
+        
+        const nowStr = formatMySQL(now);
+        const oneHourLaterStr = formatMySQL(oneHourLater);
+        
+        // Находим мероприятия, которые начнутся в ближайший час
+        // и по которым ещё не отправляли напоминание
+        const [events] = await pool.query(`
+            SELECT e.id, e.title, e.start_datetime, e.created_by
+            FROM events e
+            WHERE e.status = 'approved'
+              AND e.start_datetime > ? 
+              AND e.start_datetime <= ?
+              AND NOT EXISTS (
+                  SELECT 1 FROM notifications n 
+                  WHERE n.event_id = e.id 
+                    AND n.type = 'reminder'
+                    AND n.user_id = e.created_by
+              )
+        `, [nowStr, oneHourLaterStr]);
+
+        console.log(`🔔 Найдено мероприятий для напоминания: ${events.length}`);
+        
+        if (events.length === 0) return;
+
+        for (const event of events) {
+            // Получаем всех участников мероприятия
+            const [participants] = await pool.query(
+                'SELECT DISTINCT user_id FROM event_participants WHERE event_id = ?',
+                [event.id]
+            );
+            
+            // Собираем всех получателей (организатор + участники)
+            const recipients = new Set();
+            recipients.add(event.created_by);
+            participants.forEach(p => recipients.add(p.user_id));
+            
+            // Формируем сообщение
+            const startTime = new Date(event.start_datetime);
+            const timeStr = startTime.toLocaleString('ru-RU', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            
+            const message = `⏰ Напоминание: мероприятие "${event.title}" начнётся в ${timeStr}. Не пропустите!`;
+            
+            // Отправляем уведомление каждому получателю
+            for (const userId of recipients) {
+                // Проверяем, не отправляли ли уже напоминание этому пользователю
+                const [existing] = await pool.query(
+                    'SELECT id FROM notifications WHERE event_id = ? AND user_id = ? AND type = "reminder"',
+                    [event.id, userId]
+                );
+                
+                if (existing.length === 0) {
+                    await createNotification(
+                        userId,
+                        event.id,
+                        'reminder',
+                        message
+                    );
+                    console.log(`📨 Напоминание отправлено пользователю ${userId} о событии ${event.id}`);
+                }
+            }
+        }
+        
+        console.log(`✅ Напоминания отправлены для ${events.length} мероприятий`);
+        
+    } catch (error) {
+        mlog('[ERROR]', 'Ошибка при отправке напоминаний', error);
+    }
+}
+
+
 // Запуск cron-задачи каждый час в 00 минут
 cron.schedule('0 * * * *', autoCompleteEvents);
 console.log('✅ Cron-задача autoCompleteEvents зарегистрирована! Будет запускаться каждый час в 00 минут.');
 console.log(`⏰ Следующий запуск: ${new Date(new Date().setHours(new Date().getHours() + 1, 0, 0, 0)).toLocaleString()}`);
-// ===============================
+
+// Запуск cron-задачи каждые 15 минут для напоминаний
+cron.schedule('*/15 * * * *', sendEventReminders);
+console.log('✅ Cron-задача sendEventReminders зарегистрирована! (каждые 15 минут)');
 
 // ============================================================
 // ===== МАРШРУТЫ =====
@@ -437,8 +531,6 @@ app.post('/events/create', isAuthenticated, async (req, res) => {
         reward_type, places_count
     } = req.body;
 
-    console.log('target_audience_type:', target_audience_type);
-    console.log('target_audience_ids (raw):', target_audience_ids);
 
     // Преобразуем target_audience_id в зависимости от типа
     let targetAudienceId = null;
@@ -1384,6 +1476,11 @@ app.get('/test-auto-complete', async (req, res) => {
     res.send('Автоматическое завершение выполнено');
 });
 
+// ВРЕМЕННЫЙ МАРШРУТ ДЛЯ ТЕСТА
+app.get('/test-reminders', async (req, res) => {
+    await sendEventReminders();
+    res.send('✅ Напоминания отправлены! Проверьте уведомления.');
+});
 // ============================================================
 // ===== ЗАПУСК СЕРВЕРА =====
 // ============================================================

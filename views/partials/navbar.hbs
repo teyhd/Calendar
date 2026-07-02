@@ -23,7 +23,12 @@
                             {{#each notifications}}
                                 <li>
                                     <a class="dropdown-item" href="#">
-                                        <small>{{this.message}}</small>
+                                        <small>
+                                            {{#if (eq this.type "reminder")}}
+                                                
+                                            {{/if}}
+                                            {{this.message}}
+                                        </small>
                                         <br>
                                         <span class="text-muted" style="font-size: 0.7rem;">{{formatDate this.created_at}}</span>
                                         {{#unless this.is_read}}

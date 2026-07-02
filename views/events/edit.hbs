@@ -611,44 +611,106 @@
         trimField(titleInput, 100, 'Название');
         trimField(descInput, 500, 'Описание');
 
-        // 2. Проверка при отправке формы
+        // 2. Функция для отображения ошибки под полем
+        function showError(field, message) {
+            const existingError = field.parentNode.querySelector('.invalid-feedback');
+            if (existingError) {
+                existingError.remove();
+            }
+            field.classList.add('is-invalid');
+            const errorElement = document.createElement('div');
+            errorElement.className = 'invalid-feedback';
+            errorElement.textContent = message;
+            field.parentNode.appendChild(errorElement);
+            field.focus();
+        }
+
+        // 3. Функция для очистки ошибок
+        function clearErrors() {
+            document.querySelectorAll('.is-invalid').forEach(el => {
+                el.classList.remove('is-invalid');
+            });
+            document.querySelectorAll('.invalid-feedback').forEach(el => {
+                el.remove();
+            });
+        }
+
+        // 4. Валидация при отправке
         if (form) {
             form.addEventListener('submit', function(e) {
-                // Проверка названия
+                clearErrors();
+                let hasError = false;
+
+                // ---- Проверка названия ----
                 if (titleInput) {
                     const title = titleInput.value.trim();
                     if (title === '') {
-                        alert('Пожалуйста, введите название мероприятия.');
-                        e.preventDefault();
-                        return;
-                    }
-                    if (title.length > 100) {
-                        alert('Название не должно превышать 100 символов.');
-                        e.preventDefault();
-                        return;
+                        showError(titleInput, 'Пожалуйста, введите название мероприятия');
+                        hasError = true;
+                    } else if (title.length > 100) {
+                        showError(titleInput, 'Название не должно превышать 100 символов');
+                        hasError = true;
                     }
                 }
 
-                // Проверка описания
+                // ---- Проверка описания ----
                 if (descInput) {
                     const desc = descInput.value;
                     if (desc.length > 500) {
-                        alert('Описание не должно превышать 500 символов.');
-                        e.preventDefault();
-                        return;
+                        showError(descInput, 'Описание не должно превышать 500 символов');
+                        hasError = true;
                     }
                 }
 
-                // ===== ПРОВЕРКА АУДИТОРИИ =====
+                // ---- Проверка дат ----
+                const startInput = document.getElementById('start_datetime');
+                const endInput = document.getElementById('end_datetime');
+
+                if (startInput && endInput) {
+                    const startVal = startInput.value;
+                    const endVal = endInput.value;
+                    const originalStart = startInput.dataset.originalValue || null;
+
+                    if (!startVal) {
+                        showError(startInput, 'Пожалуйста, укажите дату и время начала');
+                        hasError = true;
+                    } else if (!endVal) {
+                        showError(endInput, 'Пожалуйста, укажите дату и время окончания');
+                        hasError = true;
+                    } else {
+                        const startDate = new Date(startVal);
+                        const endDate = new Date(endVal);
+                        const now = new Date();
+
+                        if (startDate >= endDate) {
+                            showError(startInput, 'Дата начала должна быть раньше даты окончания');
+                            hasError = true;
+                        } else if (startDate < now) {
+                            // Проверяем, менялась ли дата
+                            let isOriginal = false;
+                            if (originalStart) {
+                                const originalDate = new Date(originalStart);
+                                if (originalDate.getTime() === startDate.getTime()) {
+                                    isOriginal = true;
+                                }
+                            }
+                            if (!isOriginal) {
+                                showError(startInput, 'Дата начала не может быть в прошлом');
+                                hasError = true;
+                            }
+                        }
+                    }
+                }
+
+                // ---- Проверка аудитории ----
                 const audienceType = document.getElementById('target_audience_type').value;
                 const audienceSelect = document.getElementById('target_audience_id');
 
                 // Для class, parallel, department – проверяем, что выбран конкретный элемент
                 if (audienceType === 'class' || audienceType === 'parallel' || audienceType === 'department') {
                     if (!audienceSelect || !audienceSelect.value) {
-                        alert('Пожалуйста, выберите аудиторию для мероприятия.');
-                        e.preventDefault();
-                        return;
+                        showError(audienceSelect, 'Пожалуйста, выберите аудиторию для мероприятия');
+                        hasError = true;
                     }
                 }
 
@@ -656,9 +718,16 @@
                 if (audienceType === 'specific_users') {
                     const selectedIds = document.getElementById('selectedUsersIds');
                     if (!selectedIds || !selectedIds.value || selectedIds.value.split(',').filter(id => id).length === 0) {
-                        alert('Пожалуйста, выберите хотя бы одного пользователя.');
-                        e.preventDefault();
-                        return;
+                        const container = document.getElementById('selectedUsersContainer');
+                        if (container) {
+                            const existingError = container.parentNode.querySelector('.invalid-feedback');
+                            if (existingError) existingError.remove();
+                            const errorElement = document.createElement('div');
+                            errorElement.className = 'invalid-feedback d-block';
+                            errorElement.textContent = 'Пожалуйста, выберите хотя бы одного пользователя';
+                            container.parentNode.appendChild(errorElement);
+                            hasError = true;
+                        }
                     }
                 }
 
@@ -666,53 +735,22 @@
                 if (audienceType === 'multiple_classes') {
                     const selectedClasses = document.getElementById('selectedClassesIds');
                     if (!selectedClasses || !selectedClasses.value || selectedClasses.value.split(',').filter(id => id).length === 0) {
-                        alert('Пожалуйста, выберите хотя бы один класс.');
-                        e.preventDefault();
-                        return;
-                    }
-                }
-
-                // ===== ПРОВЕРКА ДАТ =====
-                const startInput = document.getElementById('start_datetime');
-                const endInput = document.getElementById('end_datetime');
-                if (!startInput || !endInput) return;
-
-                const startVal = startInput.value;
-                const endVal = endInput.value;
-                const originalStart = startInput.dataset.originalValue || null;
-
-                if (!startVal || !endVal) {
-                    alert('Пожалуйста, заполните дату и время начала и окончания.');
-                    e.preventDefault();
-                    return;
-                }
-
-                const startDate = new Date(startVal);
-                const endDate = new Date(endVal);
-                const now = new Date();
-
-                if (startDate >= endDate) {
-                    alert('Дата начала должна быть раньше даты окончания.');
-                    e.preventDefault();
-                    return;
-                }
-
-                // Проверка на прошедшую дату (сравниваем timestamp)
-                if (startDate < now) {
-                    let isOriginal = false;
-                    if (originalStart) {
-                        const originalDate = new Date(originalStart);
-                        // Сравниваем timestamp (миллисекунды) – надёжнее строк
-                        if (originalDate.getTime() === startDate.getTime()) {
-                            isOriginal = true;
+                        const container = document.getElementById('selectedClassesContainer');
+                        if (container) {
+                            const existingError = container.parentNode.querySelector('.invalid-feedback');
+                            if (existingError) existingError.remove();
+                            const errorElement = document.createElement('div');
+                            errorElement.className = 'invalid-feedback d-block';
+                            errorElement.textContent = 'Пожалуйста, выберите хотя бы один класс';
+                            container.parentNode.appendChild(errorElement);
+                            hasError = true;
                         }
                     }
-            
-                    if (!isOriginal) {
-                        alert('Дата начала не может быть в прошлом.');
-                        e.preventDefault();
-                        return;
-                    }
+                }
+
+                // Если есть ошибки — отменяем отправку
+                if (hasError) {
+                    e.preventDefault();
                 }
             });
         }

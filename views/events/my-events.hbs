@@ -44,7 +44,7 @@
                                 </div>
                             </div>
                         {{else if (eq status "approved")}}
-                            <button class="btn btn-danger btn-sm w-100 fw-semibold" onclick="event.stopPropagation(); cancelEvent({{id}})">
+                            <button class="btn btn-danger btn-sm w-100 fw-semibold" onclick="event.stopPropagation(); openReasonModal({{id}}, 'cancel')">
                                 ❌ Отменить мероприятие
                             </button>
                         {{else}}

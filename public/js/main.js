@@ -53,7 +53,7 @@ window.openEventModal = function(eventId) {
 
             // Получаем текущего пользователя из сессии (передаётся через мета-теги)
             const userId = parseInt(window.currentUserId || 0);
-            const userType = parseInt(window.currentUserRole || 0); // теперь число
+            const userType = parseInt(window.currentUserRole || 0);
             
             const isOwner = parseInt(eventData.created_by) === userId;
             const isAdmin = userType === 5;
@@ -121,46 +121,161 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-// ===== УДАЛЕНИЕ МЕРОПРИЯТИЯ (pending) =====
-function deleteEvent(eventId) {
-    if (!confirm('Вы уверены, что хотите удалить это мероприятие?')) return;
+// ================================================================
+// === МОДАЛКА ДЛЯ ПРИЧИНЫ ОТМЕНЫ/ОТКЛОНЕНИЯ ===
+// ================================================================
+
+// Открытие модалки с причиной
+function openReasonModal(eventId, action, endpoint) {
+    // Заполняем скрытые поля
+    document.getElementById('reasonEventId').value = eventId;
+    document.getElementById('reasonAction').value = action;
+    document.getElementById('reasonEndpoint').value = endpoint || '';
+    document.getElementById('reasonText').value = '';
     
-    fetch(`/events/delete/${eventId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-    })
-    .then(response => {
-        if (response.redirected) {
-            window.location.href = response.url;
-        } else {
-            return response.text();
-        }
-    })
-    .catch(error => {
-        console.error('Ошибка удаления:', error);
-        alert('Ошибка при удалении мероприятия');
-    });
+    // Меняем заголовок и текст кнопки в зависимости от действия
+    const modalTitle = document.getElementById('reasonModalLabel');
+    const submitBtn = document.getElementById('submitReasonBtn');
+    
+    if (action === 'reject') {
+        modalTitle.textContent = '❌ Отклонить мероприятие';
+        submitBtn.innerHTML = '<i class="bi bi-x-lg me-1"></i> Отклонить';
+        submitBtn.className = 'btn btn-danger';
+    } else if (action === 'cancel') {
+        modalTitle.textContent = '🚫 Отменить мероприятие';
+        submitBtn.innerHTML = '<i class="bi bi-x-circle me-1"></i> Отменить';
+        submitBtn.className = 'btn btn-danger';
+    } else if (action === 'cancel_registration') {
+        modalTitle.textContent = '❌ Отменить запись';
+        submitBtn.innerHTML = '<i class="bi bi-x-circle me-1"></i> Отменить запись';
+        submitBtn.className = 'btn btn-danger';
+    } else if (action === 'delete') {
+        modalTitle.textContent = '🗑️ Удалить мероприятие';
+        submitBtn.innerHTML = '<i class="bi bi-trash me-1"></i> Удалить';
+        submitBtn.className = 'btn btn-danger';
+    }
+    
+    // Показываем модалку
+    const modal = new bootstrap.Modal(document.getElementById('reasonModal'));
+    modal.show();
 }
 
-// ===== ОТМЕНА МЕРОПРИЯТИЯ (approved) =====
-function cancelEvent(eventId) {
-    const reason = prompt('Укажите причину отмены мероприятия:', '');
-    if (reason === null) return;
+// Обработчик отправки причины
+document.addEventListener('DOMContentLoaded', function() {
+    const submitBtn = document.getElementById('submitReasonBtn');
+    if (submitBtn) {
+        submitBtn.addEventListener('click', function() {
+            const eventId = document.getElementById('reasonEventId').value;
+            const action = document.getElementById('reasonAction').value;
+            const endpoint = document.getElementById('reasonEndpoint').value;
+            const reason = document.getElementById('reasonText').value.trim();
+            
+            // Закрываем модалку
+            const modal = bootstrap.Modal.getInstance(document.getElementById('reasonModal'));
+            modal.hide();
+            
+            // Отправляем запрос
+            submitReason(eventId, action, endpoint, reason);
+        });
+    }
     
-    if (!confirm('Вы уверены, что хотите отменить это мероприятие?')) return;
+    // Отправка по Ctrl+Enter в текстовом поле
+    const reasonText = document.getElementById('reasonText');
+    if (reasonText) {
+        reasonText.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && e.ctrlKey) {
+                document.getElementById('submitReasonBtn').click();
+            }
+        });
+    }
+});
+
+// Отправка причины на сервер
+function submitReason(eventId, action, endpoint, reason) {
+    const finalReason = reason || 'Причина не указана';
     
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = `/events/cancel/${eventId}`;
-    
-    const input = document.createElement('input');
-    input.type = 'hidden';
-    input.name = 'cancel_reason';
-    input.value = reason || 'Причина не указана';
-    
-    form.appendChild(input);
-    document.body.appendChild(form);
-    form.submit();
+    if (action === 'reject') {
+        // Для отклонения — отправляем через форму
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `/events/moderation/${eventId}`;
+        
+        const actionInput = document.createElement('input');
+        actionInput.type = 'hidden';
+        actionInput.name = 'action';
+        actionInput.value = 'reject';
+        
+        const reasonInput = document.createElement('input');
+        reasonInput.type = 'hidden';
+        reasonInput.name = 'rejection_reason';
+        reasonInput.value = finalReason;
+        
+        form.appendChild(actionInput);
+        form.appendChild(reasonInput);
+        document.body.appendChild(form);
+        form.submit();
+        
+    } else if (action === 'cancel') {
+        // Для отмены мероприятия
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `/events/cancel/${eventId}`;
+        
+        const reasonInput = document.createElement('input');
+        reasonInput.type = 'hidden';
+        reasonInput.name = 'cancel_reason';
+        reasonInput.value = finalReason;
+        
+        form.appendChild(reasonInput);
+        document.body.appendChild(form);
+        form.submit();
+        
+    } else if (action === 'cancel_registration') {
+        // Для отмены записи (AJAX)
+        fetch(`/api/events/${eventId}/unregister`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reason: finalReason })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('✅ ' + data.message);
+                const modal = bootstrap.Modal.getInstance(document.getElementById('eventModal'));
+                if (modal) modal.hide();
+                if (window.calendar) {
+                    window.calendar.refetchEvents();
+                    loadStats();
+                }
+            } else {
+                alert('❌ ' + (data.error || 'Ошибка при отмене записи'));
+            }
+        })
+        .catch(error => {
+            console.error('Ошибка:', error);
+            alert('❌ Ошибка сервера');
+        });
+        
+    } else if (action === 'delete') {
+        // Для удаления мероприятия (pending)
+        if (!confirm('Вы уверены, что хотите удалить это мероприятие?')) return;
+        
+        fetch(`/events/delete/${eventId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(response => {
+            if (response.redirected) {
+                window.location.href = response.url;
+            } else {
+                return response.text();
+            }
+        })
+        .catch(error => {
+            console.error('Ошибка удаления:', error);
+            alert('❌ Ошибка при удалении мероприятия');
+        });
+    }
 }
 
 console.log('main.js загружен, openEventModal доступна:', typeof window.openEventModal);
