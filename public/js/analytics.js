@@ -3,6 +3,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const periodSelect = document.getElementById('period');
     const eventTypeSelect = document.getElementById('eventType');
     const teacherFilter = document.getElementById('teacherFilter');
+    const resetBtn = document.getElementById('resetFiltersBtn');
 
     // Графики
     let teachersChart = null;
@@ -46,7 +47,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function updateTeachersChart(data) {
-        const ctx = document.getElementById('teachersChart').getContext('2d');
+        const canvas = document.getElementById('teachersChart');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
         const labels = data.map(d => d.name);
         const created = data.map(d => d.created_events);
         const participations = data.map(d => d.participations);
@@ -88,7 +91,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function updateClassesChart(data) {
-        const ctx = document.getElementById('classesChart').getContext('2d');
+        const canvas = document.getElementById('classesChart');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
         const labels = data.map(d => d.name);
         const eventsCount = data.map(d => d.events_count);
         const participants = data.map(d => d.participants_count);
@@ -130,7 +135,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function updateTypesChart(data) {
-        const ctx = document.getElementById('typesChart').getContext('2d');
+        const canvas = document.getElementById('typesChart');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
         const labels = data.map(d => d.type_name);
         const counts = data.map(d => d.count);
 
@@ -172,7 +179,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function updateTimelineChart(data) {
-        const ctx = document.getElementById('timelineChart').getContext('2d');
+        const canvas = document.getElementById('timelineChart');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
         const labels = data.map(d => d.date);
         const counts = data.map(d => d.count);
 
@@ -210,7 +219,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const container = document.getElementById('studentsTable');
         if (!container) return;
         if (!data || data.length === 0) {
-            container.innerHTML = '<p class="text-muted">Нет данных по ученикам</p>';
+            container.innerHTML = '<p class="text-muted text-center py-2">Нет данных по ученикам</p>';
             return;
         }
         let html = '<table class="table table-sm table-hover"><thead><tr><th>#</th><th>Ученик</th><th>Класс</th><th>Участий</th><th>Создано</th></tr></thead><tbody>';
@@ -231,7 +240,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const container = document.getElementById('responsibleTable');
         if (!container) return;
         if (!data || data.length === 0) {
-            container.innerHTML = '<p class="text-muted">Нет данных по ответственным</p>';
+            container.innerHTML = '<p class="text-muted text-center py-2">Нет данных по ответственным</p>';
             return;
         }
         let html = '<table class="table table-sm table-hover"><thead><tr><th>#</th><th>Ответственный</th><th>Кол-во мероприятий</th></tr></thead><tbody>';
@@ -250,7 +259,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const container = document.getElementById('organizersTable');
         if (!container) return;
         if (!data || data.length === 0) {
-            container.innerHTML = '<p class="text-muted">Нет данных по организаторам</p>';
+            container.innerHTML = '<p class="text-muted text-center py-2">Нет данных по организаторам</p>';
             return;
         }
         let html = '<table class="table table-sm table-hover"><thead><tr><th>#</th><th>Организатор</th><th>Создано мероприятий</th></tr></thead><tbody>';
@@ -263,6 +272,16 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         html += '</tbody></table>';
         container.innerHTML = html;
+    }
+
+    // ----- Сброс фильтров -----
+    if (resetBtn) {
+        resetBtn.addEventListener('click', function() {
+            periodSelect.value = 'month';
+            eventTypeSelect.value = 'all';
+            if (teacherFilter) teacherFilter.value = 'all';
+            loadAnalytics();
+        });
     }
 
     // Подписка на изменения фильтров

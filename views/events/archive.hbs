@@ -30,9 +30,6 @@
                             {{#if (isTeacherRole ../userType)}}
                                 <div>👥 Участников: {{participants_count}}</div>
                             {{/if}}
-                            {{#ifEquals ../userType 6}}
-                                <div>👶 {{student_name}}</div>
-                            {{/ifEquals}}
                             {{#ifEquals ../userType 1}}
                                 <div>📝 {{participation_status}}</div>
                             {{/ifEquals}}

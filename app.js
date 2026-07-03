@@ -311,10 +311,21 @@ console.log('✅ Cron-задача sendEventReminders зарегистриров
 // ===== МАРШРУТЫ =====
 // ============================================================
 
-app.get('/', isAuthenticated, (req, res) => {
-    res.render('calendar/index', { 
-        title: 'Календарь мероприятий' 
-    });
+// ----- Главная страница / Календарь -----
+app.get('/', isAuthenticated, async (req, res) => {
+    try {
+        const [types] = await pool.query('SELECT * FROM event_types ORDER BY name');
+        res.render('calendar/index', { 
+            title: 'Календарь мероприятий',
+            types: types
+        });
+    } catch (error) {
+        mlog('[ERROR]', 'Ошибка загрузки типов для календаря', error);
+        res.render('calendar/index', { 
+            title: 'Календарь мероприятий',
+            types: []
+        });
+    }
 });
 
 // ============================================================
@@ -873,7 +884,7 @@ app.get('/my-events', isAuthenticated, async (req, res) => {
         let events = [];
         let title = 'Мои мероприятия';
 
-        if (userType === 1) {
+        if (userType === 1) { // Ученик
             [events] = await pool.query(`
                 SELECT DISTINCT e.*, u.name as creator_name, et.name as type_name,
                        e.is_registration_enabled,
@@ -891,24 +902,20 @@ app.get('/my-events', isAuthenticated, async (req, res) => {
             `, [userId, userId, userId]);
             title = 'Мои мероприятия';
 
-        } else if (userType === 6) {
+        } else if (userType === 6) { // Родитель – только свои созданные мероприятия
             [events] = await pool.query(`
-                SELECT DISTINCT e.*, u.name as creator_name, et.name as type_name,
-                       e.is_registration_enabled,
-                       s.name as student_name
+                SELECT e.*, u.name as creator_name, et.name as type_name,
+                       e.is_registration_enabled
                 FROM events e
                 LEFT JOIN users u ON e.created_by = u.id
                 LEFT JOIN event_types et ON e.event_type_id = et.id
-                LEFT JOIN event_participants ep ON e.id = ep.event_id
-                LEFT JOIN users s ON ep.user_id = s.id
-                WHERE (e.created_by = ? 
-                       OR ep.user_id IN (SELECT student_id FROM parent_student WHERE parent_id = ?))
+                WHERE e.created_by = ?
                   AND e.status IN ('WAITING_ADMIN', 'WAITING_DIRECTOR', 'APPROVED')
-                ORDER BY e.start_datetime DESC
-            `, [userId, userId]);
-            title = 'Мероприятия моих детей';
+                ORDER BY e.created_at DESC
+            `, [userId]);
+            title = 'Мои мероприятия';
 
-        } else if ([2, 3, 4, 5].includes(userType)) {
+        } else if ([2, 3, 4, 5, 7].includes(userType)) { // Педагоги, Наставник, Тьютор, Админ, Директор
             [events] = await pool.query(`
                 SELECT e.*, u.name as creator_name, et.name as type_name,
                        e.is_registration_enabled
@@ -1479,7 +1486,7 @@ app.post('/events/resend/:id', isAuthenticated, async (req, res) => {
     }
 });
 
-// ----- Архив -----
+// ----- Архив мероприятий -----
 app.get('/events/archive', isAuthenticated, async (req, res) => {
     try {
         const userId = req.session.user.id;
@@ -1509,7 +1516,7 @@ app.get('/events/archive', isAuthenticated, async (req, res) => {
                 ORDER BY e.end_datetime DESC
             `, [userId, userId, userId]);
 
-        } else if (userType === 6) { // Родитель
+        } else if (userType === 6) { // Родитель – только свои созданные мероприятия
             [events] = await pool.query(`
                 SELECT e.*, u.name as creator_name, et.name as type_name,
                        e.is_registration_enabled,
@@ -1521,9 +1528,10 @@ app.get('/events/archive', isAuthenticated, async (req, res) => {
                 LEFT JOIN users u ON e.created_by = u.id
                 LEFT JOIN users reviewer ON e.review_author_id = reviewer.id
                 LEFT JOIN event_types et ON e.event_type_id = et.id
-                WHERE e.status IN ('COMPLETED', 'CANCELED', 'REJECTED')
+                WHERE e.created_by = ?
+                  AND e.status IN ('COMPLETED', 'CANCELED', 'REJECTED')
                 ORDER BY e.end_datetime DESC
-            `);
+            `, [userId]);
 
         } else if ([2, 3, 4, 5, 7].includes(userType)) { // Педагоги, Админ, Директор
             [events] = await pool.query(`
@@ -1560,7 +1568,6 @@ app.get('/events/archive', isAuthenticated, async (req, res) => {
         res.status(500).send('Ошибка сервера');
     }
 });
-
 // ----- Аналитика -----
 app.get('/analytics', isAuthenticated, async (req, res) => {
     const user = req.session.user;
