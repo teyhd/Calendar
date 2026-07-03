@@ -44,7 +44,6 @@
                         </div>
                     </div>
                     
-                    
                     <div class="row g-3">
                         <div class="col-md-6">
                             <div class="mb-3">
@@ -111,7 +110,6 @@
                                                 <div id="selectedUsersContainer" class="d-flex flex-wrap gap-2 mt-2">
                                                     <!-- Здесь будут чипсы выбранных пользователей -->
                                                 </div>
-                                                <!-- Скрытое поле для хранения ID выбранных пользователей -->
                                                 <input type="hidden" id="selectedUsersIds" name="target_audience_ids" value="">
                                             </div>
                                         </div>
@@ -139,7 +137,37 @@
                             </div>
                         </div>
                     </div>
-                    
+
+                    <!-- Блок: Ответственные -->
+                    <div class="block-outline mb-3">
+                        <div class="card-header bg-transparent border-bottom-0 pt-2 pb-0 px-0">
+                            <h6 class="mb-0 fw-semibold" style="color: var(--dark-gray, #172033);">
+                                👤 Ответственные за мероприятие
+                            </h6>
+                            <p class="text-muted small mt-1">Укажите одного или нескольких ответственных организаторов</p>
+                        </div>
+                        <div class="card-body px-0 pb-0">
+                            <div class="row g-2">
+                                <div class="col-12" style="position: relative;">
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" id="responsibleSearchInput" 
+                                               placeholder="Начните вводить имя ответственного..." autocomplete="off">
+                                        <button class="btn btn-outline-secondary" type="button" id="clearResponsibleSearchBtn">✕</button>
+                                    </div>
+                                    <div id="responsibleSearchResults" class="list-group mt-1" 
+                                         style="display: none; max-height: 200px; overflow-y: auto; position: absolute; z-index: 1000; left: 0; width: 100%; max-width: 350px;">
+                                    </div>
+                                </div>
+                                <div class="col-12">
+                                    <div id="selectedResponsibleContainer" class="d-flex flex-wrap gap-2 mt-2">
+                                        <!-- Чипсы выбранных ответственных -->
+                                    </div>
+                                    <input type="hidden" id="selectedResponsibleIds" name="responsible_ids" value="">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Блок: Запись на мероприятие -->
                     <div class="block-outline mb-3">
                         <div class="card-header bg-transparent border-bottom-0 pt-2 pb-0 px-0">
@@ -280,6 +308,7 @@
 
         const initialSelectedIds = {{{json selectedIds}}} || []; // ID пользователей
         const initialClassIds = {{{json selectedClassIds}}} || []; // ID классов
+        const initialResponsibleIds = {{{json selectedResponsibleIds}}} || []; // ID ответственных
 
         // ========== ЧИПСЫ ДЛЯ КЛАССОВ ==========
         const classSearchInput = document.getElementById('classSearchInput');
@@ -524,7 +553,133 @@
             updateUserHiddenInput();
         }
 
-        // ========== УПРАВЛЕНИЕ ВИДИМОСТЬЮ ==========
+        // ========== ЧИПСЫ ДЛЯ ОТВЕТСТВЕННЫХ ==========
+        const responsibleSearchInput = document.getElementById('responsibleSearchInput');
+        const responsibleResults = document.getElementById('responsibleSearchResults');
+        const selectedResponsibleContainer = document.getElementById('selectedResponsibleContainer');
+        const selectedResponsibleHidden = document.getElementById('selectedResponsibleIds');
+
+        let selectedResponsible = [];
+
+        // Предзаполнение ответственных
+        if (initialResponsibleIds.length > 0) {
+            initialResponsibleIds.forEach(id => {
+                const user = allUsers.find(u => u.id === id);
+                if (user && [2,3,4,5].includes(user.type)) {
+                    selectedResponsible.push(user);
+                }
+            });
+        }
+
+        function searchResponsible(query) {
+            if (!query.trim()) return [];
+            const q = query.toLowerCase().trim();
+            return allUsers.filter(u => 
+                u.name.toLowerCase().includes(q) && 
+                [2, 3, 4, 5].includes(u.type)
+            );
+        }
+
+        function renderResponsibleResults(results) {
+            responsibleResults.innerHTML = '';
+            if (results.length === 0) {
+                responsibleResults.style.display = 'none';
+                return;
+            }
+            results.forEach(user => {
+                const item = document.createElement('a');
+                item.href = '#';
+                item.className = 'list-group-item list-group-item-action';
+                item.textContent = `${user.name} (${roleText(user.type)})`;
+                item.dataset.id = user.id;
+                item.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    addResponsible(user);
+                    responsibleSearchInput.value = '';
+                    responsibleResults.style.display = 'none';
+                });
+                responsibleResults.appendChild(item);
+            });
+            responsibleResults.style.display = 'block';
+        }
+
+        function addResponsible(user) {
+            if (selectedResponsible.some(u => u.id === user.id)) return;
+            selectedResponsible.push(user);
+            renderResponsibleChips();
+            responsibleSearchInput.value = '';
+            responsibleResults.style.display = 'none';
+            updateResponsibleHiddenInput();
+        }
+
+        function removeResponsible(userId) {
+            selectedResponsible = selectedResponsible.filter(u => u.id !== userId);
+            renderResponsibleChips();
+            updateResponsibleHiddenInput();
+        }
+
+        function renderResponsibleChips() {
+            selectedResponsibleContainer.innerHTML = '';
+            selectedResponsible.forEach(user => {
+                const chip = document.createElement('span');
+                chip.className = 'badge bg-warning d-inline-flex align-items-center gap-1 p-2';
+                chip.style.fontSize = '0.9rem';
+                chip.style.color = '#212529';
+                chip.innerHTML = `
+                    👤 ${user.name}
+                    <span role="button" class="ms-1" style="cursor:pointer; color: #212529;" data-responsibleid="${user.id}">&times;</span>
+                `;
+                chip.querySelector('span[data-responsibleid]').addEventListener('click', function() {
+                    removeResponsible(parseInt(this.dataset.responsibleid));
+                });
+                selectedResponsibleContainer.appendChild(chip);
+            });
+        }
+
+        function updateResponsibleHiddenInput() {
+            const ids = selectedResponsible.map(u => u.id);
+            selectedResponsibleHidden.value = ids.join(',');
+            console.log('Ответственные сохранены (edit):', selectedResponsibleHidden.value);
+        }
+
+        // Поиск ответственных
+        let responsibleTimeout = null;
+        responsibleSearchInput.addEventListener('input', function() {
+            clearTimeout(responsibleTimeout);
+            responsibleTimeout = setTimeout(() => {
+                const results = searchResponsible(this.value);
+                renderResponsibleResults(results);
+            }, 200);
+        });
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('#responsibleSearchInput') && !e.target.closest('#responsibleSearchResults')) {
+                responsibleResults.style.display = 'none';
+            }
+        });
+        document.getElementById('clearResponsibleSearchBtn').addEventListener('click', function() {
+            responsibleSearchInput.value = '';
+            responsibleResults.style.display = 'none';
+            responsibleSearchInput.focus();
+        });
+        responsibleSearchInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const results = searchResponsible(this.value);
+                if (results.length > 0) {
+                    addResponsible(results[0]);
+                    this.value = '';
+                    responsibleResults.style.display = 'none';
+                }
+            }
+        });
+
+        // Инициализация чипсов ответственных (если есть)
+        if (selectedResponsible.length > 0) {
+            renderResponsibleChips();
+            updateResponsibleHiddenInput();
+        }
+
+        // ========== УПРАВЛЕНИЕ ВИДИМОСТЬЮ (аудитория) ==========
         function updateAudienceControls() {
             const type = typeSelect.value;
             selectContainer.style.display = 'none';
@@ -706,7 +861,6 @@
                 const audienceType = document.getElementById('target_audience_type').value;
                 const audienceSelect = document.getElementById('target_audience_id');
 
-                // Для class, parallel, department – проверяем, что выбран конкретный элемент
                 if (audienceType === 'class' || audienceType === 'parallel' || audienceType === 'department') {
                     if (!audienceSelect || !audienceSelect.value) {
                         showError(audienceSelect, 'Пожалуйста, выберите аудиторию для мероприятия');
@@ -714,7 +868,6 @@
                     }
                 }
 
-                // Для specific_users – проверяем, что выбран хотя бы один пользователь
                 if (audienceType === 'specific_users') {
                     const selectedIds = document.getElementById('selectedUsersIds');
                     if (!selectedIds || !selectedIds.value || selectedIds.value.split(',').filter(id => id).length === 0) {
@@ -731,7 +884,6 @@
                     }
                 }
 
-                // Для multiple_classes – проверяем, что выбран хотя бы один класс
                 if (audienceType === 'multiple_classes') {
                     const selectedClasses = document.getElementById('selectedClassesIds');
                     if (!selectedClasses || !selectedClasses.value || selectedClasses.value.split(',').filter(id => id).length === 0) {
@@ -745,6 +897,21 @@
                             container.parentNode.appendChild(errorElement);
                             hasError = true;
                         }
+                    }
+                }
+
+                // ---- Проверка ответственных (обязательное поле) ----
+                const responsibleIds = document.getElementById('selectedResponsibleIds');
+                if (!responsibleIds || !responsibleIds.value || responsibleIds.value.split(',').filter(id => id).length === 0) {
+                    const container = document.getElementById('selectedResponsibleContainer');
+                    if (container) {
+                        const existingError = container.parentNode.querySelector('.invalid-feedback');
+                        if (existingError) existingError.remove();
+                        const errorElement = document.createElement('div');
+                        errorElement.className = 'invalid-feedback d-block';
+                        errorElement.textContent = 'Пожалуйста, выберите хотя бы одного ответственного';
+                        container.parentNode.appendChild(errorElement);
+                        hasError = true;
                     }
                 }
 

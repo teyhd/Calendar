@@ -67,7 +67,8 @@ document.addEventListener('DOMContentLoaded', function() {
                             is_admin_event: event.is_admin_event,
                             is_registration_enabled: event.is_registration_enabled,
                             created_at: event.created_at,
-                            updated_at: event.updated_at
+                            updated_at: event.updated_at,
+                            responsible_ids: event.responsible_ids  // <-- ДОБАВЛЕНО
                         }
                     }));
                     successCallback(formatted);
@@ -80,16 +81,50 @@ document.addEventListener('DOMContentLoaded', function() {
         },
         eventClick: function(info) {
             const event = info.event;
-            const props = event.extendedProps;
+            const eventId = event.id;
             const userId = window.currentUserId;
             const userRole = parseInt(window.currentUserRole);
-            const isOwner = parseInt(props.created_by) === parseInt(userId);
-            const isAdmin = userRole === 5;
-            const canEdit = isAdmin || (isOwner && props.status === 'pending');
+            
+            // Запрашиваем полные данные мероприятия, включая ответственных
+            fetch(`/api/events/${eventId}`)
+                .then(response => {
+                    if (!response.ok) throw new Error('Мероприятие не найдено');
+                    return response.json();
+                })
+                .then(eventData => {
+                    const isOwner = parseInt(eventData.created_by) === parseInt(userId);
+                    const isAdmin = userRole === 5;
+                    const canEdit = isAdmin || (isOwner && eventData.status === 'pending');
 
-            renderEventModal(event, props, canEdit, isAdmin, isOwner);
-            const modal = new bootstrap.Modal(document.getElementById('eventModal'));
-            modal.show();
+                    // Формируем объект props с добавленными responsible_names
+                    const props = {
+                        id: eventData.id,
+                        description: eventData.description || '',
+                        location: eventData.location || '',
+                        status: eventData.status,
+                        creator: eventData.creator_name || 'Неизвестен',
+                        type: eventData.type_name || 'Не указан',
+                        created_by: eventData.created_by,
+                        start_datetime: eventData.start_datetime,
+                        end_datetime: eventData.end_datetime,
+                        level: eventData.level,
+                        target_audience_type: eventData.target_audience_type,
+                        target_audience_id: eventData.target_audience_id,
+                        is_admin_event: eventData.is_admin_event,
+                        is_registration_enabled: eventData.is_registration_enabled,
+                        created_at: eventData.created_at,
+                        updated_at: eventData.updated_at,
+                        responsible_names: eventData.responsible_names || []  // <-- ДОБАВЛЕНО
+                    };
+
+                    renderEventModal(event, props, canEdit, isAdmin, isOwner);
+                    const modal = new bootstrap.Modal(document.getElementById('eventModal'));
+                    modal.show();
+                })
+                .catch(error => {
+                    console.error('Ошибка загрузки мероприятия:', error);
+                    alert('Не удалось загрузить мероприятие');
+                });
         },
         eventDidMount: function(info) {
             const status = info.event.extendedProps.status;
@@ -104,7 +139,6 @@ document.addEventListener('DOMContentLoaded', function() {
             info.el.style.borderLeft = `4px solid ${color}`;
             info.el.style.borderRadius = '4px';
             info.el.style.boxShadow = '0 1px 3px rgba(0,0,0,0.08)';
-            
         }
     });
 
@@ -206,6 +240,17 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner) {
     const isRegistrationEnabled = props.is_registration_enabled === 1 || props.is_registration_enabled === true;
     const showParticipants = isOwner || isAdmin;
 
+    // ---- Формируем блок ответственных ----
+    let responsibleHtml = '';
+    if (props.responsible_names && props.responsible_names.length > 0) {
+        responsibleHtml = `
+            <div class="mb-2" style="display: flex; align-items: baseline; gap: 0.5rem;">
+                <span style="font-weight: 600; color: #172033; min-width: 110px;">👥 Ответственные:</span>
+                <span>${props.responsible_names.join(', ')}</span>
+            </div>
+        `;
+    }
+
     modalBody.innerHTML = `
         <div class="row">
             <div class="col-md-8">
@@ -255,6 +300,8 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner) {
                     <span style="font-weight: 600; color: #172033; min-width: 110px;">👤 Организатор:</span>
                     <span>${props.creator || 'Неизвестен'}</span>
                 </div>
+
+                ${responsibleHtml}
 
                 <div class="mb-2" style="display: flex; align-items: baseline; gap: 0.5rem;">
                     <span style="font-weight: 600; color: #172033; min-width: 110px;">🎯 Аудитория:</span>

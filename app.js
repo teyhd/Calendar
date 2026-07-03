@@ -494,12 +494,12 @@ app.get('/api/admin/users', isAdmin, async (req, res) => {
 // ===== УПРАВЛЕНИЕ МЕРОПРИЯТИЯМИ =====
 // ============================================================
 
+// ----- Страница создания мероприятия -----
 app.get('/events/create', isAuthenticated, async (req, res) => {
     try {
         const [types] = await pool.query('SELECT * FROM event_types ORDER BY name');
         const [classes] = await pool.query('SELECT * FROM kaf_name WHERE type = 1 ORDER BY name');
         const [departments] = await pool.query('SELECT * FROM kaf_name WHERE type = 2 ORDER BY name');
-        // subjects – возможно, больше нет, оставим для совместимости
         const [subjects] = await pool.query('SELECT * FROM subjects ORDER BY name');
         const [users] = await pool.query(`
             SELECT id, name, type 
@@ -522,15 +522,15 @@ app.get('/events/create', isAuthenticated, async (req, res) => {
     }
 });
 
+// ----- Создание мероприятия (POST) -----
 app.post('/events/create', isAuthenticated, async (req, res) => {
     const {
         title, description, event_type_id, department_id, subject_id,
         start_datetime, end_datetime, location, level,
         target_audience_type, target_audience_id, target_audience_ids,
         is_admin_event, is_registration_enabled, enable_rewards,
-        reward_type, places_count
+        reward_type, places_count, responsible_ids
     } = req.body;
-
 
     // Преобразуем target_audience_id в зависимости от типа
     let targetAudienceId = null;
@@ -543,13 +543,24 @@ app.post('/events/create', isAuthenticated, async (req, res) => {
         targetAudienceId = target_audience_id || null;
     }
 
+    // Ответственные – если пришли как массив, склеиваем через запятую
+    let responsibleIds = null;
+    if (responsible_ids) {
+        if (Array.isArray(responsible_ids)) {
+            responsibleIds = responsible_ids.filter(id => id).join(',');
+        } else {
+            // если строка (пришла как hidden-поле с одним значением)
+            responsibleIds = responsible_ids;
+        }
+    }
+
     // is_admin_event для учеников и родителей = 0
     let isAdminEvent = is_admin_event ? 1 : 0;
     if (![2, 3, 4, 5].includes(req.session.user.type)) {
         isAdminEvent = 0;
     }
 
-    // === ОБРАБОТКА НАГРАД ===
+    // Обработка наград
     let rewardType = 'none';
     let rewardPlaces = null;
     if (enable_rewards) {
@@ -565,8 +576,8 @@ app.post('/events/create', isAuthenticated, async (req, res) => {
                 title, description, event_type_id, department_id, subject_id,
                 start_datetime, end_datetime, location, level, status,
                 target_audience_type, target_audience_id, is_admin_event, is_registration_enabled,
-                reward_type, reward_places, created_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)`,
+                reward_type, reward_places, created_by, responsible_ids
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 title, description, event_type_id, department_id || null, subject_id || null,
                 start_datetime, end_datetime, location, level || 'school',
@@ -575,7 +586,8 @@ app.post('/events/create', isAuthenticated, async (req, res) => {
                 is_registration_enabled ? 1 : 0,
                 rewardType,
                 rewardPlaces,
-                req.session.user.id
+                req.session.user.id,
+                responsibleIds
             ]
         );
         const eventId = result.insertId;
@@ -599,7 +611,7 @@ app.post('/events/create', isAuthenticated, async (req, res) => {
     }
 });
 
-// ----- Редактирование мероприятия (страница) -----
+// ----- Страница редактирования мероприятия -----
 app.get('/events/edit/:id', isAuthenticated, async (req, res) => {
     const eventId = req.params.id;
     try {
@@ -637,6 +649,12 @@ app.get('/events/edit/:id', isAuthenticated, async (req, res) => {
             selectedClassIds = String(event.target_audience_id).split(',').map(id => parseInt(id));
         }
 
+        // Подготовка выбранных ID ответственных
+        let selectedResponsibleIds = [];
+        if (event.responsible_ids) {
+            selectedResponsibleIds = String(event.responsible_ids).split(',').map(id => parseInt(id));
+        }
+
         res.render('events/edit', {
             title: 'Редактирование мероприятия',
             event,
@@ -646,7 +664,8 @@ app.get('/events/edit/:id', isAuthenticated, async (req, res) => {
             subjects: subjects || [],
             users,
             selectedIds,          // для пользователей
-            selectedClassIds      // для классов
+            selectedClassIds,     // для классов
+            selectedResponsibleIds // для ответственных
         });
     } catch (error) {
         mlog('[ERROR]', 'Ошибка загрузки редактирования', error);
@@ -654,6 +673,7 @@ app.get('/events/edit/:id', isAuthenticated, async (req, res) => {
     }
 });
 
+// ----- Обновление мероприятия (POST) -----
 app.post('/events/edit/:id', isAuthenticated, async (req, res) => {
     const eventId = req.params.id;
     const {
@@ -661,7 +681,7 @@ app.post('/events/edit/:id', isAuthenticated, async (req, res) => {
         start_datetime, end_datetime, location, level,
         target_audience_type, target_audience_id, target_audience_ids,
         is_admin_event, is_registration_enabled, enable_rewards,
-        reward_type, places_count
+        reward_type, places_count, responsible_ids
     } = req.body;
 
     try {
@@ -685,13 +705,23 @@ app.post('/events/edit/:id', isAuthenticated, async (req, res) => {
             targetAudienceId = target_audience_id || null;
         }
 
+        // Ответственные
+        let responsibleIds = null;
+        if (responsible_ids) {
+            if (Array.isArray(responsible_ids)) {
+                responsibleIds = responsible_ids.filter(id => id).join(',');
+            } else {
+                responsibleIds = responsible_ids;
+            }
+        }
+
         // is_admin_event
         let isAdminEvent = is_admin_event ? 1 : 0;
         if (![2, 3, 4, 5].includes(req.session.user.type)) {
             isAdminEvent = 0;
         }
 
-        // === ОБРАБОТКА НАГРАД ===
+        // Награды
         let rewardType = 'none';
         let rewardPlaces = null;
         if (enable_rewards) {
@@ -706,7 +736,7 @@ app.post('/events/edit/:id', isAuthenticated, async (req, res) => {
                 title = ?, description = ?, event_type_id = ?, department_id = ?, subject_id = ?,
                 start_datetime = ?, end_datetime = ?, location = ?, level = ?,
                 target_audience_type = ?, target_audience_id = ?, is_admin_event = ?, is_registration_enabled = ?,
-                reward_type = ?, reward_places = ?,
+                reward_type = ?, reward_places = ?, responsible_ids = ?,
                 status = 'pending', approved_by = NULL, rejection_reason = NULL
              WHERE id = ?`,
             [
@@ -717,6 +747,7 @@ app.post('/events/edit/:id', isAuthenticated, async (req, res) => {
                 is_registration_enabled ? 1 : 0,
                 rewardType,
                 rewardPlaces,
+                responsibleIds,
                 eventId
             ]
         );
@@ -1010,7 +1041,8 @@ app.get('/api/events', isAuthenticated, async (req, res) => {
 
         let sql = `
             SELECT e.*, u.name as creator_name, et.name as type_name,
-                   e.is_registration_enabled
+                   e.is_registration_enabled,
+                   e.responsible_ids
             FROM events e
             LEFT JOIN users u ON e.created_by = u.id
             LEFT JOIN event_types et ON e.event_type_id = et.id
@@ -1448,22 +1480,45 @@ app.post('/notifications/mark-read/:id', isAuthenticated, async (req, res) => {
 });
 
 
-// ----- Получение одного мероприятия -----
+// ----- Получение одного мероприятия с именами ответственных -----
 app.get('/api/events/:id', isAuthenticated, async (req, res) => {
     const eventId = req.params.id;
     try {
         const [events] = await pool.query(`
             SELECT e.*, u.name as creator_name, et.name as type_name,
-                   e.is_registration_enabled
+                   e.is_registration_enabled,
+                   e.responsible_ids
             FROM events e
             LEFT JOIN users u ON e.created_by = u.id
             LEFT JOIN event_types et ON e.event_type_id = et.id
             WHERE e.id = ?
         `, [eventId]);
+        
         if (events.length === 0) {
             return res.status(404).json({ error: 'Мероприятие не найдено' });
         }
-        res.json(events[0]);
+        
+        const event = events[0];
+        const result = { ...event };
+        
+        // Если есть ответственные, получаем их имена
+        if (event.responsible_ids) {
+            const ids = event.responsible_ids.split(',').map(id => parseInt(id)).filter(id => id);
+            if (ids.length > 0) {
+                const placeholders = ids.map(() => '?').join(',');
+                const [users] = await pool.query(
+                    `SELECT id, name FROM users WHERE id IN (${placeholders})`,
+                    ids
+                );
+                result.responsible_names = users.map(u => u.name);
+            } else {
+                result.responsible_names = [];
+            }
+        } else {
+            result.responsible_names = [];
+        }
+        
+        res.json(result);
     } catch (error) {
         mlog('[ERROR]', 'Ошибка получения мероприятия', error);
         res.status(500).json({ error: 'Ошибка сервера' });
