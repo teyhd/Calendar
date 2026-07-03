@@ -1,0 +1,176 @@
+<h1 class="mb-4" style="font-size: 1.8rem; font-weight: 700; color: var(--dark-gray, #172033);">
+    📊 Аналитика
+</h1>
+
+{{#if showAllData}}
+    <p class="text-muted">Полный доступ ко всем данным системы</p>
+{{else}}
+    <p class="text-muted">Данные ограничены: ваши мероприятия и мероприятия вашей кафедры</p>
+{{/if}}
+
+<!-- Фильтры -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <label for="period" class="form-label fw-semibold">Период</label>
+        <select class="form-select" id="period">
+            <option value="week">Неделя</option>
+            <option value="month" selected>Месяц</option>
+            <option value="quarter">Квартал</option>
+            <option value="year">Год</option>
+            <option value="all">Всё время</option>
+        </select>
+    </div>
+    <div class="col-md-3">
+        <label for="eventType" class="form-label fw-semibold">Тип мероприятия</label>
+        <select class="form-select" id="eventType">
+            <option value="all">Все типы</option>
+            {{#each eventTypes}}
+                <option value="{{id}}">{{name}}</option>
+            {{/each}}
+        </select>
+    </div>
+    {{#if showAllData}}
+        <div class="col-md-3">
+            <label for="teacherFilter" class="form-label fw-semibold">Учитель</label>
+            <select class="form-select" id="teacherFilter">
+                <option value="all">Все учителя</option>
+                {{#each teachers}}
+                    <option value="{{id}}">{{name}}</option>
+                {{/each}}
+            </select>
+        </div>
+    {{/if}}
+</div>
+
+<!-- Общая статистика (карточки) -->
+<div class="row g-4 mb-4" id="statsCards">
+    <div class="col-md-3 col-sm-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-primary">
+                <i class="bi bi-calendar-event"></i>
+            </div>
+            <div class="stat-info">
+                <span class="stat-label">Всего мероприятий</span>
+                <span class="stat-number" id="totalEvents">0</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-success">
+                <i class="bi bi-check-circle"></i>
+            </div>
+            <div class="stat-info">
+                <span class="stat-label">Утверждено</span>
+                <span class="stat-number" id="approvedEvents">0</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-danger">
+                <i class="bi bi-x-circle"></i>
+            </div>
+            <div class="stat-info">
+                <span class="stat-label">Отклонено</span>
+                <span class="stat-number" id="rejectedEvents">0</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="stat-card">
+            <div class="stat-icon bg-info">
+                <i class="bi bi-people"></i>
+            </div>
+            <div class="stat-info">
+                <span class="stat-label">Участников</span>
+                <span class="stat-number" id="totalParticipants">0</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Графики -->
+<div class="row g-4">
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-header bg-transparent">
+                <h5 class="mb-0">🏆 Топ педагогов</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="teachersChart" height="250"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-header bg-transparent">
+                <h5 class="mb-0">📚 Активность классов</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="classesChart" height="250"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mt-3">
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-header bg-transparent">
+                <h5 class="mb-0">🏷️ Распределение по типам</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="typesChart" height="250"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-header bg-transparent">
+                <h5 class="mb-0">📈 Динамика мероприятий</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="timelineChart" height="250"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Новые таблицы -->
+<div class="row g-4 mt-4">
+    <div class="col-md-4">
+        <div class="card shadow-sm">
+            <div class="card-header bg-transparent">
+                <h5 class="mb-0">🎓 Топ учеников</h5>
+            </div>
+            <div class="card-body" id="studentsTable" style="max-height: 300px; overflow-y: auto;">
+                <p class="text-muted">Загрузка...</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm">
+            <div class="card-header bg-transparent">
+                <h5 class="mb-0">👤 Топ ответственных</h5>
+            </div>
+            <div class="card-body" id="responsibleTable" style="max-height: 300px; overflow-y: auto;">
+                <p class="text-muted">Загрузка...</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm">
+            <div class="card-header bg-transparent">
+                <h5 class="mb-0">🏅 Топ организаторов</h5>
+            </div>
+            <div class="card-body" id="organizersTable" style="max-height: 300px; overflow-y: auto;">
+                <p class="text-muted">Загрузка...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Скрипты -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="/js/analytics.js"></script>

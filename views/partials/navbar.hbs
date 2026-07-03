@@ -23,12 +23,7 @@
                             {{#each notifications}}
                                 <li>
                                     <a class="dropdown-item" href="#">
-                                        <small>
-                                            {{#if (eq this.type "reminder")}}
-                                                
-                                            {{/if}}
-                                            {{this.message}}
-                                        </small>
+                                        <small>{{this.message}}</small>
                                         <br>
                                         <span class="text-muted" style="font-size: 0.7rem;">{{formatDate this.created_at}}</span>
                                         {{#unless this.is_read}}
@@ -113,39 +108,77 @@
                     </a>
                 </li>
 
-                {{#ifEquals user.type 6}}
+                {{#if (eq user.type 6)}}
                     <li class="nav-item">
                         <a class="nav-link" href="/child-events">
                             <i class="bi bi-people me-2"></i> Мероприятия ребёнка
                         </a>
                     </li>
-                {{/ifEquals}}
+                {{/if}}
 
-                {{#ifTeacher}}
+                <!-- ======== СОЗДАТЬ ======== -->
+                {{#if (or (eq user.type 2) (or (eq user.type 3) (or (eq user.type 4) (or (eq user.type 5) (eq user.type 7)))))}}
                     <li class="nav-item">
                         <a class="nav-link" href="/events/create">
                             <i class="bi bi-plus-circle me-2"></i> Создать
                         </a>
                     </li>
-                {{/ifTeacher}}
+                {{/if}}
 
-                {{#ifEquals user.type 5}}
+                <!-- ======== АНАЛИТИКА ======== -->
+                {{#if (isTeacherRole user.type)}}
+                    <li class="nav-item">
+                        <a class="nav-link" href="/analytics">
+                            <i class="bi bi-graph-up me-2"></i> Аналитика
+                        </a>
+                    </li>
+                {{/if}}
+
+                {{#if (or (eq user.type 5) (eq user.type 7))}}
+                    <li class="nav-item">
+                        <a class="nav-link" href="/analytics">
+                            <i class="bi bi-graph-up me-2"></i> Аналитика
+                        </a>
+                    </li>
+                {{/if}}
+                <!-- ========================== -->
+
+                <!-- ======== ОТЗЫВЫ ======== -->
+                {{#if (or (eq user.type 1) (or (eq user.type 2) (or (eq user.type 3) (or (eq user.type 4) (or (eq user.type 5) (or (eq user.type 6) (eq user.type 7)))))))}}
+                    <li class="nav-item">
+                        <a class="nav-link" href="/reviews">
+                            <i class="bi bi-chat-left-text me-2"></i> Отзывы
+                        </a>
+                    </li>
+                {{/if}}
+                <!-- ========================== -->
+
+                <!-- Модерация только для админа и директора -->
+                {{#if (or (eq user.type 5) (eq user.type 7))}}
                     <li class="nav-item">
                         <a class="nav-link" href="/events/moderation">
                             <i class="bi bi-clock-history me-2"></i> Модерация
                         </a>
                     </li>
+                {{/if}}
+
+                <!-- Управление пользователями только для админа и директора -->
+                {{#if (or (eq user.type 5) (eq user.type 7))}}
                     <li class="nav-item">
                         <a class="nav-link" href="/admin/users">
                             <i class="bi bi-people me-2"></i> Пользователи
                         </a>
                     </li>
+                {{/if}}
+
+                <!-- Настройки только для админа и директора -->
+                {{#if (or (eq user.type 5) (eq user.type 7))}}
                     <li class="nav-item">
                         <a class="nav-link" href="/admin/settings">
                             <i class="bi bi-gear me-2"></i> Настройки
                         </a>
                     </li>
-                {{/ifEquals}}
+                {{/if}}
             </ul>
 
             <hr>

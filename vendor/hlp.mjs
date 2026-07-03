@@ -51,22 +51,26 @@ export function registerHelpers(handlebarsInstance) {
     
     hbs.registerHelper('statusColor', (status) => {
         const colors = {
-            pending: '#ffc107',
-            approved: '#28a745',
-            rejected: '#dc3545',
-            canceled: '#6c757d',
-            completed: '#17a2b8'
+            'DRAFT': '#adb5bd',
+            'WAITING_ADMIN': '#ffc107',
+            'WAITING_DIRECTOR': '#fd7e14',
+            'APPROVED': '#28a745',
+            'REJECTED': '#dc3545',
+            'CANCELED': '#6c757d',
+            'COMPLETED': '#17a2b8'
         };
         return colors[status] || '#6c757d';
     });
     
     hbs.registerHelper('statusText', (status) => {
         const texts = {
-            pending: 'На модерации',
-            approved: 'Опубликовано',
-            rejected: 'Отклонено',
-            canceled: 'Отменено',
-            completed: 'Завершено'
+            'DRAFT': 'Черновик',
+            'WAITING_ADMIN': 'Ожидает админа',
+            'WAITING_DIRECTOR': 'Ожидает директора',
+            'APPROVED': 'Утверждено',
+            'REJECTED': 'Отклонено',
+            'CANCELED': 'Отменено',
+            'COMPLETED': 'Завершено'
         };
         return texts[status] || status;
     });

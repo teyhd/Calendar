@@ -51,12 +51,12 @@ window.openEventModal = function(eventId) {
                 return;
             }
 
-            // Получаем текущего пользователя из сессии (передаётся через мета-теги)
             const userId = parseInt(window.currentUserId || 0);
             const userType = parseInt(window.currentUserRole || 0);
             
             const isOwner = parseInt(eventData.created_by) === userId;
             const isAdmin = userType === 5;
+            const isDirector = userType === 7;
             const canEdit = isAdmin || (isOwner && eventData.status === 'pending');
 
             const event = {
@@ -83,7 +83,7 @@ window.openEventModal = function(eventId) {
                 updated_at: eventData.updated_at
             };
 
-            renderEventModal(event, props, canEdit, isAdmin, isOwner);
+            renderEventModal(event, props, canEdit, isAdmin, isOwner, isDirector);
             const modal = new bootstrap.Modal(document.getElementById('eventModal'));
             modal.show();
         })
@@ -126,14 +126,11 @@ document.addEventListener('DOMContentLoaded', function() {
 // ================================================================
 
 // Открытие модалки с причиной
-function openReasonModal(eventId, action, endpoint) {
-    // Заполняем скрытые поля
+function openReasonModal(eventId, action) {
     document.getElementById('reasonEventId').value = eventId;
     document.getElementById('reasonAction').value = action;
-    document.getElementById('reasonEndpoint').value = endpoint || '';
     document.getElementById('reasonText').value = '';
     
-    // Меняем заголовок и текст кнопки в зависимости от действия
     const modalTitle = document.getElementById('reasonModalLabel');
     const submitBtn = document.getElementById('submitReasonBtn');
     
@@ -155,7 +152,6 @@ function openReasonModal(eventId, action, endpoint) {
         submitBtn.className = 'btn btn-danger';
     }
     
-    // Показываем модалку
     const modal = new bootstrap.Modal(document.getElementById('reasonModal'));
     modal.show();
 }
@@ -167,19 +163,15 @@ document.addEventListener('DOMContentLoaded', function() {
         submitBtn.addEventListener('click', function() {
             const eventId = document.getElementById('reasonEventId').value;
             const action = document.getElementById('reasonAction').value;
-            const endpoint = document.getElementById('reasonEndpoint').value;
             const reason = document.getElementById('reasonText').value.trim();
             
-            // Закрываем модалку
             const modal = bootstrap.Modal.getInstance(document.getElementById('reasonModal'));
             modal.hide();
             
-            // Отправляем запрос
-            submitReason(eventId, action, endpoint, reason);
+            submitReason(eventId, action, reason);
         });
     }
     
-    // Отправка по Ctrl+Enter в текстовом поле
     const reasonText = document.getElementById('reasonText');
     if (reasonText) {
         reasonText.addEventListener('keydown', function(e) {
@@ -191,47 +183,34 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Отправка причины на сервер
-function submitReason(eventId, action, endpoint, reason) {
+function submitReason(eventId, action, reason) {
     const finalReason = reason || 'Причина не указана';
     
     if (action === 'reject') {
-        // Для отклонения — отправляем через форму
         const form = document.createElement('form');
         form.method = 'POST';
-        form.action = `/events/moderation/${eventId}`;
-        
-        const actionInput = document.createElement('input');
-        actionInput.type = 'hidden';
-        actionInput.name = 'action';
-        actionInput.value = 'reject';
-        
+        form.action = `/events/reject/${eventId}`;
         const reasonInput = document.createElement('input');
         reasonInput.type = 'hidden';
         reasonInput.name = 'rejection_reason';
         reasonInput.value = finalReason;
-        
-        form.appendChild(actionInput);
         form.appendChild(reasonInput);
         document.body.appendChild(form);
         form.submit();
         
     } else if (action === 'cancel') {
-        // Для отмены мероприятия
         const form = document.createElement('form');
         form.method = 'POST';
         form.action = `/events/cancel/${eventId}`;
-        
         const reasonInput = document.createElement('input');
         reasonInput.type = 'hidden';
         reasonInput.name = 'cancel_reason';
         reasonInput.value = finalReason;
-        
         form.appendChild(reasonInput);
         document.body.appendChild(form);
         form.submit();
         
     } else if (action === 'cancel_registration') {
-        // Для отмены записи (AJAX)
         fetch(`/api/events/${eventId}/unregister`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -257,9 +236,7 @@ function submitReason(eventId, action, endpoint, reason) {
         });
         
     } else if (action === 'delete') {
-        // Для удаления мероприятия (pending)
         if (!confirm('Вы уверены, что хотите удалить это мероприятие?')) return;
-        
         fetch(`/events/delete/${eventId}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
@@ -277,5 +254,46 @@ function submitReason(eventId, action, endpoint, reason) {
         });
     }
 }
+
+// ================================================================
+// === МОДАЛКА ДЛЯ ОТЗЫВА ===
+// ================================================================
+
+// Открытие модалки с отзывом
+function openReviewModal(eventId, currentText) {
+    document.getElementById('reviewEventId').value = eventId;
+    document.getElementById('reviewText').value = currentText || '';
+    const modal = new bootstrap.Modal(document.getElementById('reviewModal'));
+    modal.show();
+}
+
+// Обработчик отправки отзыва
+document.addEventListener('DOMContentLoaded', function() {
+    const submitReviewBtn = document.getElementById('submitReviewBtn');
+    if (submitReviewBtn) {
+        submitReviewBtn.addEventListener('click', function() {
+            const eventId = document.getElementById('reviewEventId').value;
+            const reviewText = document.getElementById('reviewText').value.trim();
+            
+            if (!reviewText) {
+                alert('Пожалуйста, введите текст отзыва');
+                return;
+            }
+            
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = `/events/review/${eventId}`;
+            
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'review_text';
+            input.value = reviewText;
+            
+            form.appendChild(input);
+            document.body.appendChild(form);
+            form.submit();
+        });
+    }
+});
 
 console.log('main.js загружен, openEventModal доступна:', typeof window.openEventModal);

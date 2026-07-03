@@ -11,11 +11,11 @@
                     <i class="bi bi-plus-circle"></i> Создать мероприятие
                 </a>
             {{/if}}
-            {{#ifEquals user.type 5}}
+            {{#if (or (eq user.type 5) (eq user.type 7))}}
                 <a href="/events/moderation" class="btn btn-warning btn-lg">
                     <i class="bi bi-clock-history"></i> Модерация
                 </a>
-            {{/ifEquals}}
+            {{/if}}
         </div>
     </div>
 </div>
@@ -81,8 +81,11 @@
             <div class="col-md-3">
                 <select class="form-select" id="filterStatus">
                     <option value="all">Все статусы</option>
-                    <option value="approved">Опубликованные</option>
-                    <option value="pending">На модерации</option>
+                    <option value="APPROVED">Опубликованные</option>
+                    <option value="WAITING">На модерации</option>
+                    <option value="REJECTED">Отклонённые</option>
+                    <option value="CANCELED">Отменённые</option>
+                    <option value="COMPLETED">Завершённые</option>
                 </select>
             </div>
             <div class="col-md-3">

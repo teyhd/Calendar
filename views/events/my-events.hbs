@@ -20,7 +20,6 @@
                         </span>
                     </div>
                     <div class="card-body position-relative">
-                        <!-- Иконка кликабельности -->
                         <i class="bi bi-hand-index-thumb float-end text-muted opacity-50" style="font-size: 1.2rem;"></i>
                         <h5 class="card-title fw-semibold" style="color: var(--dark-gray, #172033);">{{title}}</h5>
                         <p class="card-text small text-muted">{{description}}</p>
@@ -30,7 +29,7 @@
                         </div>
                     </div>
                     <div class="card-footer bg-white border-top-0 pt-0">
-                        {{#if (eq status "pending")}}
+                        {{#if (eq status "WAITING_ADMIN")}}
                             <div class="row g-2">
                                 <div class="col-6">
                                     <a href="/events/edit/{{id}}" class="btn btn-primary btn-sm w-100 fw-semibold" onclick="event.stopPropagation();">
@@ -43,10 +42,16 @@
                                     </button>
                                 </div>
                             </div>
-                        {{else if (eq status "approved")}}
-                            <button class="btn btn-danger btn-sm w-100 fw-semibold" onclick="event.stopPropagation(); openReasonModal({{id}}, 'cancel')">
-                                ❌ Отменить мероприятие
-                            </button>
+                        {{else if (eq status "APPROVED")}}
+                            {{#if (or (eq ../user.type 5) (eq ../user.type 7))}}
+                                <button class="btn btn-danger btn-sm w-100 fw-semibold" onclick="event.stopPropagation(); openReasonModal({{id}}, 'cancel')">
+                                    ❌ Отменить мероприятие
+                                </button>
+                            {{else}}
+                                <div class="text-center text-muted">
+                                    <i class="bi bi-chevron-down"></i>
+                                </div>
+                            {{/if}}
                         {{else}}
                             <div class="text-center text-muted">
                                 <i class="bi bi-chevron-down"></i>

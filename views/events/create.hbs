@@ -10,12 +10,12 @@
                     <!-- Основная информация -->
                     <div class="mb-3">
                         <label for="title" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Название *</label>
-                        <input type="text" class="form-control" id="title" name="title" placeholder="Введите название мероприятия" maxlength="100" required>
+                        <input type="text" class="form-control" id="title" name="title" placeholder="Введите название мероприятия" maxlength="100" value="{{event.title}}" required>
                     </div>
                     
                     <div class="mb-3">
                         <label for="description" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Описание</label>
-                        <textarea class="form-control" id="description" name="description" rows="3" placeholder="Краткое описание мероприятия" maxlength="500"></textarea>
+                        <textarea class="form-control" id="description" name="description" rows="3" placeholder="Краткое описание мероприятия" maxlength="500">{{event.description}}</textarea>
                     </div>
                     
                     <div class="row g-3">
@@ -25,7 +25,7 @@
                                 <select class="form-select" id="event_type_id" name="event_type_id" required>
                                     <option value="">Выберите тип</option>
                                     {{#each types}}
-                                        <option value="{{id}}">{{name}}</option>
+                                        <option value="{{id}}" {{#if (eq ../event.event_type_id id)}}selected{{/if}}>{{name}}</option>
                                     {{/each}}
                                 </select>
                             </div>
@@ -34,11 +34,11 @@
                             <div class="mb-3">
                                 <label for="level" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Уровень</label>
                                 <select class="form-select" id="level" name="level">
-                                    <option value="school">🏫 Школьное</option>
-                                    <option value="city">🏙️ Городское</option>
-                                    <option value="regional">🌍 Региональное</option>
-                                    <option value="national">🇷🇺 Всероссийское</option>
-                                    <option value="international">🌐 Международное</option>
+                                    <option value="school" {{#if (eq event.level "school")}}selected{{/if}}>🏫 Школьное</option>
+                                    <option value="city" {{#if (eq event.level "city")}}selected{{/if}}>🏙️ Городское</option>
+                                    <option value="regional" {{#if (eq event.level "regional")}}selected{{/if}}>🌍 Региональное</option>
+                                    <option value="national" {{#if (eq event.level "national")}}selected{{/if}}>🇷🇺 Всероссийское</option>
+                                    <option value="international" {{#if (eq event.level "international")}}selected{{/if}}>🌐 Международное</option>
                                 </select>
                             </div>
                         </div>
@@ -49,20 +49,20 @@
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label for="start_datetime" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Дата и время начала *</label>
-                                <input type="datetime-local" class="form-control" id="start_datetime" name="start_datetime" required>
+                                <input type="datetime-local" class="form-control" id="start_datetime" name="start_datetime" value="{{formatDateForInput event.start_datetime}}" required>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label for="end_datetime" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Дата и время окончания *</label>
-                                <input type="datetime-local" class="form-control" id="end_datetime" name="end_datetime" required>
+                                <input type="datetime-local" class="form-control" id="end_datetime" name="end_datetime" value="{{formatDateForInput event.end_datetime}}" required>
                             </div>
                         </div>
                     </div>
                     
                     <div class="mb-3">
                         <label for="location" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Место проведения</label>
-                        <input type="text" class="form-control" id="location" name="location" placeholder="Например: Актовый зал, кабинет 301">
+                        <input type="text" class="form-control" id="location" name="location" placeholder="Например: Актовый зал, кабинет 301" value="{{event.location}}">
                     </div>
                     
                     <!-- Блок: Аудитория -->
@@ -76,12 +76,12 @@
                                     <div class="mb-3">
                                         <label for="target_audience_type" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Тип аудитории *</label>
                                         <select class="form-select" id="target_audience_type" name="target_audience_type" required>
-                                            <option value="class">📚 Конкретный класс</option>
-                                            <option value="multiple_classes">📚 Несколько классов</option>
-                                            <option value="parallel">📖 Целая параллель</option>
-                                            <option value="department">🏛️ Кафедра</option>
-                                            <option value="specific_users">👤 Конкретные пользователи</option>
-                                            <option value="all">🌍 Все пользователи</option>
+                                            <option value="class" {{#if (eq event.target_audience_type "class")}}selected{{/if}}>📚 Конкретный класс</option>
+                                            <option value="multiple_classes" {{#if (eq event.target_audience_type "multiple_classes")}}selected{{/if}}>📚 Несколько классов</option>
+                                            <option value="parallel" {{#if (eq event.target_audience_type "parallel")}}selected{{/if}}>📖 Целая параллель</option>
+                                            <option value="department" {{#if (eq event.target_audience_type "department")}}selected{{/if}}>🏛️ Кафедра</option>
+                                            <option value="specific_users" {{#if (eq event.target_audience_type "specific_users")}}selected{{/if}}>👤 Конкретные пользователи</option>
+                                            <option value="all" {{#if (eq event.target_audience_type "all")}}selected{{/if}}>🌍 Все пользователи</option>
                                         </select>
                                     </div>
                                 </div>
@@ -174,7 +174,7 @@
                         </div>
                         <div class="card-body px-0 pb-0">
                             <div class="form-check mb-3">
-                               <input class="form-check-input form-check-input-lg" type="checkbox" id="enable_rewards" name="enable_rewards" value="1">
+                               <input class="form-check-input form-check-input-lg" type="checkbox" id="enable_rewards" name="enable_rewards" value="1" {{#if (ne event.reward_type "none")}}checked{{/if}}>
                                 <label class="form-check-label form-check-label-lg" for="enable_rewards">
                                     Начислять очки за участие
                                 </label>
@@ -186,15 +186,15 @@
                                         <div class="mb-3">
                                             <label for="reward_type" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Тип события</label>
                                             <select class="form-select" id="reward_type" name="reward_type">
-                                                <option value="educational">📖 Учебное (всем участникам очки)</option>
-                                                <option value="competitive">🏅 Соревновательное (распределение мест)</option>
+                                                <option value="educational" {{#if (eq event.reward_type "educational")}}selected{{/if}}>📖 Учебное (всем участникам очки)</option>
+                                                <option value="competitive" {{#if (eq event.reward_type "competitive")}}selected{{/if}}>🏅 Соревновательное (распределение мест)</option>
                                             </select>
                                         </div>
                                     </div>
                                     <div class="col-md-6" id="places_block">
                                         <div class="mb-3">
                                             <label for="places_count" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Количество призовых мест</label>
-                                            <input type="number" class="form-control" id="places_count" name="places_count" min="1" max="100" value="3" step="1">
+                                            <input type="number" class="form-control" id="places_count" name="places_count" min="1" max="100" value="{{event.reward_places}}" step="1">
                                             <div class="form-text text-muted small">Введите число от 1 до 100</div>
                                         </div>
                                     </div>
@@ -217,7 +217,7 @@
                         </div>
                         <div class="card-body px-0 pb-0">
                             <div class="form-check mb-3">
-                                <input class="form-check-input form-check-input-lg" type="checkbox" id="is_registration_enabled" name="is_registration_enabled" value="1">
+                                <input class="form-check-input form-check-input-lg" type="checkbox" id="is_registration_enabled" name="is_registration_enabled" value="1" {{#if event.is_registration_enabled}}checked{{/if}}>
                                 <label class="form-check-label form-check-label-lg" for="is_registration_enabled">
                                     Участники могут записываться на это мероприятие
                                 </label>
@@ -232,7 +232,7 @@
                     <!-- Для администратора (показывается только педагогам и админам) -->
                     {{#ifTeacher}}
                     <div class="mb-3 form-check">
-                        <input type="checkbox" class="form-check-input" id="is_admin_event" name="is_admin_event" value="1">
+                        <input type="checkbox" class="form-check-input" id="is_admin_event" name="is_admin_event" value="1" {{#if event.is_admin_event}}checked{{/if}}>
                         <label class="form-check-label" for="is_admin_event">
                             🔒 Только для администраторов (не видно ученикам и родителям)
                         </label>
@@ -247,7 +247,9 @@
                         </div>
                     {{/ifEquals}}
                     <div class="d-flex gap-2 mt-4">
-                        <button type="submit" class="btn btn-primary px-4 fw-semibold">✅ Создать мероприятие</button>
+                        <button type="submit" class="btn btn-primary px-4 fw-semibold">
+                            {{#if isCopy}}🔄 Создать исправленную заявку{{else}}✅ Создать мероприятие{{/if}}
+                        </button>
                         <a href="/" class="btn btn-secondary px-4 fw-semibold">Отмена</a>
                     </div>
                 </form>
@@ -305,6 +307,11 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('✅ Кафедры загружены:', departments.length);
     console.log('✅ Пользователи загружены:', allUsers.length);
 
+    // Переменные для предзаполнения чипсов (при копировании)
+    const initialSelectedIds = {{{json selectedIds}}} || [];
+    const initialClassIds = {{{json selectedClassIds}}} || [];
+    const initialResponsibleIds = {{{json selectedResponsibleIds}}} || [];
+
     // ---------- Элементы DOM ----------
     const typeSelect = document.getElementById('target_audience_type');
     const selectContainer = document.getElementById('select_audience_container');
@@ -319,6 +326,14 @@ document.addEventListener('DOMContentLoaded', function() {
     const selectedClassesHidden = document.getElementById('selectedClassesIds');
 
     let selectedClasses = [];
+
+    // ---- Предзаполнение классов при копировании ----
+    if (initialClassIds.length > 0) {
+        initialClassIds.forEach(id => {
+            const cls = allClasses.find(c => c.id === id);
+            if (cls) selectedClasses.push(cls);
+        });
+    }
 
     function searchClasses(query) {
         if (!query.trim()) return [];
@@ -418,12 +433,26 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    // ---- Если есть предзаполненные классы, рендерим чипсы ----
+    if (selectedClasses.length > 0) {
+        renderClassChips();
+        updateClassHiddenInput();
+    }
+
     // ========== ЧИПСЫ ДЛЯ ПОЛЬЗОВАТЕЛЕЙ (аудитория) ==========
     const userSearchInput = document.getElementById('userSearchInput');
     const userResults = document.getElementById('searchResults');
     const selectedUsersContainer = document.getElementById('selectedUsersContainer');
     const selectedUsersHidden = document.getElementById('selectedUsersIds');
     let selectedUsers = [];
+
+    // ---- Предзаполнение пользователей при копировании ----
+    if (initialSelectedIds.length > 0) {
+        initialSelectedIds.forEach(id => {
+            const user = allUsers.find(u => u.id === id);
+            if (user) selectedUsers.push(user);
+        });
+    }
 
     function searchUsers(query) {
         if (!query.trim()) return [];
@@ -528,6 +557,12 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    // ---- Если есть предзаполненные пользователи, рендерим чипсы ----
+    if (selectedUsers.length > 0) {
+        renderUserChips();
+        updateUserHiddenInput();
+    }
+
     // ========== ЧИПСЫ ДЛЯ ОТВЕТСТВЕННЫХ ==========
     const responsibleSearchInput = document.getElementById('responsibleSearchInput');
     const responsibleResults = document.getElementById('responsibleSearchResults');
@@ -535,6 +570,16 @@ document.addEventListener('DOMContentLoaded', function() {
     const selectedResponsibleHidden = document.getElementById('selectedResponsibleIds');
 
     let selectedResponsible = [];
+
+    // ---- Предзаполнение ответственных при копировании ----
+    if (initialResponsibleIds.length > 0) {
+        initialResponsibleIds.forEach(id => {
+            const user = allUsers.find(u => u.id === id);
+            if (user && [2,3,4,5].includes(user.type)) {
+                selectedResponsible.push(user);
+            }
+        });
+    }
 
     function searchResponsible(query) {
         if (!query.trim()) return [];
@@ -639,6 +684,12 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    // ---- Если есть предзаполненные ответственные, рендерим чипсы ----
+    if (selectedResponsible.length > 0) {
+        renderResponsibleChips();
+        updateResponsibleHiddenInput();
+    }
+
     // ========== УПРАВЛЕНИЕ ВИДИМОСТЬЮ (аудитория) ==========
     function updateAudienceControls() {
         const type = typeSelect.value;
@@ -689,6 +740,19 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
     }
+
+// Принудительно устанавливаем тип аудитории (если не выбран или пустой)
+if (!typeSelect.value || typeSelect.value === '') {
+    typeSelect.value = 'class';
+}
+
+// Добавляем обработчик и сразу вызываем
+typeSelect.addEventListener('change', updateAudienceControls);
+updateAudienceControls();
+
+// Дополнительная проверка: если список всё равно пуст, выводим в консоль
+console.log('Текущий тип аудитории:', typeSelect.value);
+console.log('Количество классов для заполнения:', allClasses.length);
 
     typeSelect.addEventListener('change', updateAudienceControls);
     updateAudienceControls();
