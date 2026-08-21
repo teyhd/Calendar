@@ -1,7 +1,5 @@
 // Shared, dependency-free interaction layer for the server-rendered interface.
 (() => {
-    let lastFocusedElement = null;
-
     function dialogById(id) {
         return document.getElementById(id);
     }
@@ -10,7 +8,7 @@
         const dialog = dialogById(id);
         if (!dialog || typeof dialog.showModal !== 'function') return;
         if (!dialog.open) {
-            lastFocusedElement = opener instanceof HTMLElement ? opener : null;
+            dialog._appOpener = opener instanceof HTMLElement ? opener : null;
             dialog.showModal();
         }
     }
@@ -91,9 +89,16 @@
             dialog.addEventListener('click', (event) => {
                 if (event.target === dialog) dialog.close();
             });
+            dialog.addEventListener('cancel', (event) => {
+                event.preventDefault();
+                dialog.close();
+            });
             dialog.addEventListener('close', () => {
-                if (lastFocusedElement?.isConnected) lastFocusedElement.focus();
-                lastFocusedElement = null;
+                const opener = dialog._appOpener;
+                dialog._appOpener = null;
+                if (opener?.isConnected) {
+                    window.setTimeout(() => opener.focus(), 0);
+                }
             });
         });
 
