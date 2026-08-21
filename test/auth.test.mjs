@@ -53,9 +53,12 @@ test('successful code-flow token produces a Calendar session with the maximum se
     assert.equal(extractServiceRoleID(claims().right, 42), 5);
 });
 
-test('accepts roles scoped by the Calendar JWT audience while rejecting another service scope', () => {
+test('accepts MainPortal scoped role claims while rejecting another service scope', () => {
     const session = buildSessionFromToken(token(claims({ right: [{ role_id: 5 }] })), cfg);
     assert.equal(readSignedSession(session, sessionSecret)?.role_id, 5);
+    const numericSession = buildSessionFromToken(token(claims({ right: [5] })), cfg);
+    assert.equal(readSignedSession(numericSession, sessionSecret)?.role_id, 5);
+    assert.equal(extractServiceRoleID([5], 42), 5);
     assert.equal(extractServiceRoleID([{ srv_id: 9, role_id: 5 }], 42), 0);
     assert.throws(() => buildSessionFromToken(token(claims({ right: [{ srv_id: 9, role_id: 5 }] })), cfg), /no calendar role/);
 });
