@@ -154,8 +154,9 @@
 
         window.currentUserId = document.querySelector('meta[name="user-id"]')?.content || 0;
         window.currentUserRole = document.querySelector('meta[name="user-role"]')?.content || 0;
+        const compactCalendar = window.matchMedia('(max-width: 820px)');
         const calendar = new FullCalendar.Calendar(calendarElement, {
-            initialView: 'dayGridMonth', locale: 'ru', height: 'auto',
+            initialView: compactCalendar.matches ? 'listWeek' : 'dayGridMonth', locale: 'ru', height: 'auto',
             headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,listWeek' },
             buttonText: { prev: 'Назад', next: 'Вперёд', today: 'Сегодня', month: 'Месяц', week: 'Неделя', list: 'Список' },
             events(fetchInfo, successCallback, failureCallback) {
@@ -172,6 +173,9 @@
             eventDidMount(info) {
                 const status = STATUS[info.event.extendedProps.status] || STATUS.DRAFT;
                 info.el.style.borderLeft = `3px solid ${status.color}`;
+            },
+            windowResize() {
+                if (compactCalendar.matches && calendar.view.type !== 'listWeek') calendar.changeView('listWeek');
             }
         });
         calendar.render();
