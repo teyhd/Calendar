@@ -17,6 +17,10 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
+// В production приложение работает за одним локальным Nginx reverse proxy.
+// Это необходимо Express для корректной обработки secure session-cookie.
+app.set('trust proxy', 1);
+
 // Регистрируем хелперы ДО создания engine
 registerHelpers(handlebars);
 
@@ -2535,7 +2539,14 @@ app.get('/api/analytics', isAuthenticated, async (req, res) => {
 // ============================================================
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    mlog(`Сервер запущен на http://localhost:${PORT}`);
+const listenOptions = { port: PORT };
+
+if (process.env.HOST) {
+    listenOptions.host = process.env.HOST;
+}
+
+app.listen(listenOptions, () => {
+    const host = listenOptions.host || 'localhost';
+    mlog(`Сервер запущен на http://${host}:${PORT}`);
     mlog('Школьный календарь готов к работе!');
 });

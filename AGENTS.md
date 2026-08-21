@@ -12,7 +12,7 @@
 ## Среда и credential values
 
 - До работы с данными прочитай `vendor/db.mjs`, актуальные переменные окружения и существующие запросы/миграции. Не подменяй их предположениями.
-- Calendar использует `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_PORT`, `SESSION_SECRET`, `NODE_ENV` и `PORT`. Не переноси в него несовместимые имена переменных из Attendance (`MDBHOST`, `DBUSER`, `DBPASS`, `DBNAMESUSR`).
+- Calendar использует `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_PORT`, `SESSION_SECRET`, `NODE_ENV`, `HOST` и `PORT`. Не переноси в него несовместимые имена переменных из Attendance (`MDBHOST`, `DBUSER`, `DBPASS`, `DBNAMESUSR`).
 - Секреты, приватные ключи и production-доступы хранятся только в `.env`, окружении процесса или игнорируемом `AGENTS.local.md`. Не читай без необходимости, не выводи, не коммить и не публикуй их значения.
 - В production параметры БД и `SESSION_SECRET` задаются через окружение PM2/сервиса либо локальный `.env`, но никогда не tracked-файлами, логами, issue, commit message или Markdown-документацией.
 - Используй operational credential values только для Calendar и только когда это необходимо для поставленной задачи.
