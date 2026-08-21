@@ -231,6 +231,8 @@
   .fc .fc-toolbar-title { font-family: var(--font-display); font-size: 25px; }
   .fc .fc-button { border-radius: 4px !important; box-shadow: none !important; font-family: var(--font-sans); font-size: 12px; font-weight: 700; text-transform: none; }
   .fc .fc-event { padding: 2px 4px; border-radius: 4px; font-size: 12px; font-weight: 700; }
+  .fc .fc-daygrid-event .fc-event-time { display: none; }
+  .fc .fc-daygrid-event .fc-daygrid-event-dot { display: none; }
   .fc .fc-col-header-cell-cushion { padding: 10px 4px; color: #667085; font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
   .fc .fc-daygrid-day-number { padding: 8px; color: #344054; font-size: 12px; font-weight: 700; }
   .fc .fc-list-event:hover td { background: #eff4ff; }
@@ -243,6 +245,10 @@
   .app-main { max-width: none; margin-left: 0; padding: 28px 20px 44px; }
   .app-form-layout { grid-template-columns: 1fr; }
   .app-form-aside { position: static; }
+}
+
+@media (max-width: 820px) {
+  .fc .fc-dayGridMonth-button, .fc .fc-timeGridWeek-button { display: none; }
 }
 
 @media (min-width: 1024px) { .app-menu-button { display: none; } }
