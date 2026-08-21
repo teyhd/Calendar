@@ -51,7 +51,7 @@
                     </div>
                     <div class="card-footer bg-white border-top-0 pt-0">
                         {{#if (eq status "REJECTED")}}
-                            {{#if (or (eq created_by ../user.id) (or (eq ../userType 5) (eq ../userType 7)))}}
+                            {{#if (or (eq created_by ../user.id) (eq ../userType 5))}}
                                 <a href="/events/copy/{{id}}" class="btn btn-warning btn-sm w-100 fw-semibold" onclick="event.stopPropagation();">
                                     🔄 Повторить (исправить)
                                 </a>
@@ -61,7 +61,7 @@
                                 </div>
                             {{/if}}
                         {{else if (eq status "COMPLETED")}}
-                            {{#if (or (eq created_by ../user.id) (or (eq ../userType 5) (eq ../userType 7)))}}
+                            {{#if (or (eq created_by ../user.id) (eq ../userType 5))}}
                                 <div class="d-flex gap-2">
                                     {{#if review_text}}
                                         <button class="btn btn-info btn-sm w-100 fw-semibold" onclick="event.stopPropagation(); openReviewModal({{id}}, '{{review_text}}')">

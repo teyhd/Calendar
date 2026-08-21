@@ -233,8 +233,8 @@
                         </div>
                     </div>
 
-                    <!-- Для администратора (показывается только педагогам, админам и директору) -->
-                    {{#if (or (eq user.type 2) (or (eq user.type 3) (or (eq user.type 4) (or (eq user.type 5) (eq user.type 7)))))}}
+                    <!-- Для администратора (показывается только педагогам и админам) -->
+                    {{#if (or (eq user.type 2) (or (eq user.type 3) (or (eq user.type 4) (eq user.type 5))))}}
                         <div class="mb-3 form-check">
                             <input type="checkbox" class="form-check-input" id="is_admin_event" name="is_admin_event" value="1" {{#if event.is_admin_event}}checked{{/if}}>
                             <label class="form-check-label" for="is_admin_event">

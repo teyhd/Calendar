@@ -53,7 +53,6 @@ export function registerHelpers(handlebarsInstance) {
         const colors = {
             'DRAFT': '#adb5bd',
             'WAITING_ADMIN': '#ffc107',
-            'WAITING_DIRECTOR': '#fd7e14',
             'APPROVED': '#28a745',
             'REJECTED': '#dc3545',
             'CANCELED': '#6c757d',
@@ -66,7 +65,6 @@ export function registerHelpers(handlebarsInstance) {
         const texts = {
             'DRAFT': 'Черновик',
             'WAITING_ADMIN': 'Ожидает админа',
-            'WAITING_DIRECTOR': 'Ожидает директора',
             'APPROVED': 'Утверждено',
             'REJECTED': 'Отклонено',
             'CANCELED': 'Отменено',
