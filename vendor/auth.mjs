@@ -163,7 +163,8 @@ export function calendarPermissions(roleId) {
 export function extractServiceRoleID(rightClaim, serviceID) {
     if (!Array.isArray(rightClaim)) return 0;
     return rightClaim.reduce((maxRole, row) => {
-        const roleId = Number(row?.role_id || 0);
+        // MainPortal's audience-scoped Calendar token serializes roles as numbers.
+        const roleId = Number.isInteger(row) ? row : Number(row?.role_id || 0);
         const hasServiceID = Object.prototype.hasOwnProperty.call(row || {}, 'srv_id');
         const belongsToService = !hasServiceID || Number(row.srv_id) === Number(serviceID);
         return belongsToService && roleId > maxRole ? roleId : maxRole;
