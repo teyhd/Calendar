@@ -498,16 +498,14 @@ app.post('/events/admin-approve/:id', requirePageAuth, requirePermission('modera
             const [approvals] = await connection.query("SELECT id, status FROM event_approvals WHERE event_id = ? AND user_id = ? AND role_type = 'admin' FOR UPDATE", [eventId, user(req).id]);
             if (!approvals[0] || approvals[0].status !== 'pending') throw new Error('У вас нет ожидающего утверждения');
             await connection.query("UPDATE event_approvals SET status = 'approved' WHERE id = ?", [approvals[0].id]);
-            const [all] = await connection.query("SELECT status FROM event_approvals WHERE event_id = ? AND role_type = 'admin'", [eventId]);
-            if (all.length && all.every((item) => item.status === 'approved')) await connection.query("UPDATE events SET status = 'APPROVED', approved_by = ? WHERE id = ?", [user(req).id, eventId]);
+            await connection.query("DELETE FROM event_approvals WHERE event_id = ? AND id <> ? AND status = 'pending'", [eventId, approvals[0].id]);
+            await connection.query("UPDATE events SET status = 'APPROVED', approved_by = ? WHERE id = ? AND status = 'WAITING_ADMIN'", [user(req).id, eventId]);
             await connection.commit();
         } catch (error) { await connection.rollback(); throw error; } finally { connection.release(); }
         const eventNow = await getEvent(eventId);
         if (eventNow.status === 'APPROVED') {
-            await createNotification(event.created_by, eventId, 'approved', `Мероприятие «${event.title}» утверждено всеми администраторами и опубликовано.`);
-            await notifyAdmins(eventId, 'approved', `Мероприятие «${event.title}» утверждено всеми администраторами.`, user(req).id);
-        } else {
-            await createNotification(event.created_by, eventId, 'admin_approved', `Администратор утвердил мероприятие «${event.title}». Ожидаются остальные утверждения.`);
+            await createNotification(event.created_by, eventId, 'approved', `Мероприятие «${event.title}» утверждено и опубликовано.`);
+            await notifyAdmins(eventId, 'approved', `Мероприятие «${event.title}» утверждено и опубликовано.`, user(req).id);
         }
         res.redirect('/events/moderation');
     } catch (error) { pageError(res, 400, error.message || 'Ошибка сервера'); }
