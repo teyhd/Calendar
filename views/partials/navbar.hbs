@@ -1,200 +1,54 @@
 {{#if isAuthenticated}}
-    <!-- Навбар для авторизованных пользователей -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-        <div class="container-fluid">
-            <!-- Кнопка для открытия sidebar (всегда видна) -->
-            <button class="btn btn-outline-light me-2" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebar" aria-controls="sidebar">
-                <i class="bi bi-list"></i>
-            </button>
-            <a class="navbar-brand" href="/">📅 Школьный календарь</a>
-            
-            <!-- Правая часть навбара (уведомления, профиль, выход) -->
-            <div class="d-flex align-items-center ms-auto">
-                <!-- Уведомления -->
-                <div class="dropdown me-2">
-                    <a class="nav-link dropdown-toggle text-white" href="#" id="notificationsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                        🔔
-                        {{#if unreadCount}}
-                            <span class="badge bg-danger">{{unreadCount}}</span>
-                        {{/if}}
-                    </a>
-                    <ul class="dropdown-menu dropdown-menu-end notifications-dropdown" aria-labelledby="notificationsDropdown">
-                        {{#if notifications.length}}
-                            {{#each notifications}}
-                                <li>
-                                    <a class="dropdown-item" href="#">
-                                        <small>{{this.message}}</small>
-                                        <br>
-                                        <span class="text-muted" style="font-size: 0.7rem;">{{formatDate this.created_at}}</span>
-                                        {{#unless this.is_read}}
-                                            <span class="badge bg-primary">Новое</span>
-                                        {{/unless}}
-                                    </a>
-                                </li>
-                            {{/each}}
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item text-center" href="/notifications/all">Все уведомления</a></li>
-                        {{else}}
-                            <li><span class="dropdown-item text-muted">Нет уведомлений</span></li>
-                        {{/if}}
-                    </ul>
-                </div>
-
-                <!-- Профиль пользователя -->
-                <div class="dropdown me-2">
-                    <a class="nav-link dropdown-toggle text-white" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                        <i class="bi bi-person-circle"></i> {{user.name}}
-                    </a>
-                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
-                        <li><span class="dropdown-item-text"><strong>{{user.role_name}}</strong></span></li>
-                        <li><hr class="dropdown-divider"></li>
-                        {{#if (eq user.type 1)}}
-                            <li><span class="dropdown-item-text"><small>Класс: {{#if user.kaf_name}}{{user.kaf_name}}{{else}}Не указан{{/if}}</small></span></li>
-                        {{/if}}
-                        {{#if (or (eq user.type 2) (eq user.type 3) (eq user.type 4))}}
-                            <li><span class="dropdown-item-text"><small>Кафедра: {{#if user.kaf_name}}{{user.kaf_name}}{{else}}Не указана{{/if}}</small></span></li>
-                        {{/if}}
-                        {{#if (eq user.type 6)}}
-                            <li><span class="dropdown-item-text"><small>Класс ребёнка: {{#if user.child_kaf_name}}{{user.child_kaf_name}}{{else}}Не указан{{/if}}</small></span></li>
-                        {{/if}}
-                    </ul>
-                </div>
-
-                <!-- Кнопка выхода (без рамки) -->
-                <a href="/auth/logout" class="btn btn-link text-white text-decoration-none btn-sm">Выйти</a>
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <div class="container-fluid">
+        <button class="btn btn-outline-light me-2" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebar" aria-controls="sidebar"><i class="bi bi-list"></i></button>
+        <a class="navbar-brand" href="/">📅 Школьный календарь</a>
+        <div class="d-flex align-items-center ms-auto">
+            <div class="dropdown me-2">
+                <a class="nav-link dropdown-toggle text-white" href="#" id="notificationsDropdown" role="button" data-bs-toggle="dropdown">🔔 {{#if unreadCount}}<span class="badge bg-danger">{{unreadCount}}</span>{{/if}}</a>
+                <ul class="dropdown-menu dropdown-menu-end notifications-dropdown" aria-labelledby="notificationsDropdown">
+                    {{#if notifications.length}}
+                        {{#each notifications}}
+                            <li><a class="dropdown-item" href="/notifications/all"><small>{{message}}</small><br><span class="text-muted" style="font-size: .7rem">{{formatDate created_at}}</span>{{#unless is_read}} <span class="badge bg-primary">Новое</span>{{/unless}}</a></li>
+                        {{/each}}
+                        <li><hr class="dropdown-divider"></li><li><a class="dropdown-item text-center" href="/notifications/all">Все уведомления</a></li>
+                    {{else}}<li><span class="dropdown-item text-muted">Нет уведомлений</span></li>{{/if}}
+                </ul>
             </div>
-        </div>
-    </nav>
-
-    <!-- ============ SIDEBAR (Offcanvas) ============ -->
-    <div class="offcanvas offcanvas-start" tabindex="-1" id="sidebar" aria-labelledby="sidebarLabel">
-        <div class="offcanvas-header">
-            <h5 class="offcanvas-title" id="sidebarLabel">📅 Меню</h5>
-            <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Закрыть"></button>
-        </div>
-        <div class="offcanvas-body">
-            <!-- Информация о пользователе -->
-            <div class="mb-4">
-                <div class="fw-bold" style="font-size: 1.1rem;">{{user.name}}</div>
-                <div class="text-muted small">{{user.role_name}}</div>
-                {{#if (eq user.type 1)}}
-                    <div class="text-muted small">Класс: {{#if user.kaf_name}}{{user.kaf_name}}{{else}}Не указан{{/if}}</div>
-                {{/if}}
-                {{#if (or (eq user.type 2) (eq user.type 3) (eq user.type 4))}}
-                    <div class="text-muted small">Кафедра: {{#if user.kaf_name}}{{user.kaf_name}}{{else}}Не указана{{/if}}</div>
-                {{/if}}
-                {{#if (eq user.type 6)}}
-                    <div class="text-muted small">Класс ребёнка: {{#if user.child_kaf_name}}{{user.child_kaf_name}}{{else}}Не указан{{/if}}</div>
-                {{/if}}
+            <div class="dropdown me-2">
+                <a class="nav-link dropdown-toggle text-white" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown"><i class="bi bi-person-circle"></i> {{user.name}}</a>
+                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                    <li><span class="dropdown-item-text"><strong>{{user.role_name}}</strong></span></li><li><hr class="dropdown-divider"></li>
+                    {{#if (eq user.type 1)}}<li><span class="dropdown-item-text"><small>Класс: {{#if user.kaf_name}}{{user.kaf_name}}{{else}}Не указан{{/if}}</small></span></li>{{/if}}
+                    {{#if (or (eq user.type 2) (or (eq user.type 3) (eq user.type 4)))}}<li><span class="dropdown-item-text"><small>Кафедра: {{#if user.kaf_name}}{{user.kaf_name}}{{else}}Не указана{{/if}}</small></span></li>{{/if}}
+                    {{#if (eq user.type 6)}}<li><span class="dropdown-item-text"><small>Класс ребёнка: {{#if user.child_kaf_name}}{{user.child_kaf_name}}{{else}}Не указан{{/if}}</small></span></li>{{/if}}
+                </ul>
             </div>
-            <hr>
-
-            <!-- Ссылки меню -->
-            <ul class="nav flex-column">
-                <li class="nav-item">
-                    <a class="nav-link" href="/">
-                        <i class="bi bi-calendar-event me-2"></i> Календарь
-                    </a>
-                </li>
-
-                <li class="nav-item">
-                    <a class="nav-link" href="/my-events">
-                        <i class="bi bi-list-ul me-2"></i> Мои мероприятия
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="/events/archive">
-                        <i class="bi bi-archive me-2"></i> Архив
-                    </a>
-                </li>
-
-                {{#if (eq user.type 6)}}
-                    <li class="nav-item">
-                        <a class="nav-link" href="/child-events">
-                            <i class="bi bi-people me-2"></i> Мероприятия ребёнка
-                        </a>
-                    </li>
-                {{/if}}
-
-                <!-- ======== СОЗДАТЬ ======== -->
-                {{#if (or (eq user.type 2) (or (eq user.type 3) (or (eq user.type 4) (or (eq user.type 5) (eq user.type 7)))))}}
-                    <li class="nav-item">
-                        <a class="nav-link" href="/events/create">
-                            <i class="bi bi-plus-circle me-2"></i> Создать
-                        </a>
-                    </li>
-                {{/if}}
-
-                <!-- ======== АНАЛИТИКА ======== -->
-                {{#if (isTeacherRole user.type)}}
-                    <li class="nav-item">
-                        <a class="nav-link" href="/analytics">
-                            <i class="bi bi-graph-up me-2"></i> Аналитика
-                        </a>
-                    </li>
-                {{/if}}
-
-                {{#if (or (eq user.type 5) (eq user.type 7))}}
-                    <li class="nav-item">
-                        <a class="nav-link" href="/analytics">
-                            <i class="bi bi-graph-up me-2"></i> Аналитика
-                        </a>
-                    </li>
-                {{/if}}
-                <!-- ========================== -->
-
-                <!-- ======== ОТЗЫВЫ ======== -->
-                {{#if (or (eq user.type 1) (or (eq user.type 2) (or (eq user.type 3) (or (eq user.type 4) (or (eq user.type 5) (or (eq user.type 6) (eq user.type 7)))))))}}
-                    <li class="nav-item">
-                        <a class="nav-link" href="/reviews">
-                            <i class="bi bi-chat-left-text me-2"></i> Отзывы
-                        </a>
-                    </li>
-                {{/if}}
-                <!-- ========================== -->
-
-                <!-- Модерация только для админа и директора -->
-                {{#if (or (eq user.type 5) (eq user.type 7))}}
-                    <li class="nav-item">
-                        <a class="nav-link" href="/events/moderation">
-                            <i class="bi bi-clock-history me-2"></i> Модерация
-                        </a>
-                    </li>
-                {{/if}}
-
-                <!-- Управление пользователями только для админа и директора -->
-                {{#if (or (eq user.type 5) (eq user.type 7))}}
-                    <li class="nav-item">
-                        <a class="nav-link" href="/admin/users">
-                            <i class="bi bi-people me-2"></i> Пользователи
-                        </a>
-                    </li>
-                {{/if}}
-
-                <!-- Настройки только для админа и директора -->
-                {{#if (or (eq user.type 5) (eq user.type 7))}}
-                    <li class="nav-item">
-                        <a class="nav-link" href="/admin/settings">
-                            <i class="bi bi-gear me-2"></i> Настройки
-                        </a>
-                    </li>
-                {{/if}}
-            </ul>
-
-            <hr>
-            <div class="mt-3">
-                <a href="/auth/logout" class="btn btn-danger w-100">
-                    <i class="bi bi-box-arrow-right me-2"></i> Выйти
-                </a>
-            </div>
+            <a href="/auth/logout" class="btn btn-link text-white text-decoration-none btn-sm">Выйти</a>
         </div>
     </div>
+</nav>
 
+<div class="offcanvas offcanvas-start" tabindex="-1" id="sidebar" aria-labelledby="sidebarLabel">
+    <div class="offcanvas-header"><h5 class="offcanvas-title" id="sidebarLabel">📅 Меню</h5><button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Закрыть"></button></div>
+    <div class="offcanvas-body">
+        <div class="mb-4"><div class="fw-bold" style="font-size: 1.1rem">{{user.name}}</div><div class="text-muted small">{{user.role_name}}</div></div><hr>
+        <ul class="nav flex-column">
+            <li class="nav-item"><a class="nav-link" href="/"><i class="bi bi-calendar-event me-2"></i>Календарь</a></li>
+            <li class="nav-item"><a class="nav-link" href="/my-events"><i class="bi bi-list-ul me-2"></i>Мои мероприятия</a></li>
+            <li class="nav-item"><a class="nav-link" href="/events/archive"><i class="bi bi-archive me-2"></i>Архив</a></li>
+            {{#if (eq user.type 6)}}<li class="nav-item"><a class="nav-link" href="/child-events"><i class="bi bi-people me-2"></i>Мероприятия ребёнка</a></li>{{/if}}
+            {{#if (or (eq user.type 2) (or (eq user.type 3) (or (eq user.type 4) (eq user.type 5))))}}<li class="nav-item"><a class="nav-link" href="/events/create"><i class="bi bi-plus-circle me-2"></i>Создать</a></li>{{/if}}
+            {{#if (or (isTeacherRole user.type) (eq user.type 5))}}<li class="nav-item"><a class="nav-link" href="/analytics"><i class="bi bi-graph-up me-2"></i>Аналитика</a></li>{{/if}}
+            <li class="nav-item"><a class="nav-link" href="/reviews"><i class="bi bi-chat-left-text me-2"></i>Отзывы</a></li>
+            {{#if (eq user.type 5)}}
+                <li class="nav-item"><a class="nav-link" href="/events/moderation"><i class="bi bi-clock-history me-2"></i>Модерация</a></li>
+                <li class="nav-item"><a class="nav-link" href="/admin/settings"><i class="bi bi-gear me-2"></i>Настройки</a></li>
+            {{/if}}
+        </ul>
+        <hr><div class="mt-3"><a href="/auth/logout" class="btn btn-danger w-100"><i class="bi bi-box-arrow-right me-2"></i>Выйти</a></div>
+    </div>
+</div>
 {{else}}
-    <!-- Навбар для неавторизованных (страница входа) -->
-    <nav class="navbar navbar-dark bg-primary">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/">📅 Школьный календарь</a>
-        </div>
-    </nav>
+<nav class="navbar navbar-dark bg-primary"><div class="container-fluid"><a class="navbar-brand" href="/">📅 Школьный календарь</a></div></nav>
 {{/if}}

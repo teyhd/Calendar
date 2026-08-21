@@ -56,8 +56,7 @@ window.openEventModal = function(eventId) {
             
             const isOwner = parseInt(eventData.created_by) === userId;
             const isAdmin = userType === 5;
-            const isDirector = userType === 7;
-            const canEdit = isAdmin || (isOwner && eventData.status === 'pending');
+            const canEdit = isAdmin || (isOwner && eventData.status === 'WAITING_ADMIN');
 
             const event = {
                 id: eventData.id,
@@ -83,7 +82,7 @@ window.openEventModal = function(eventId) {
                 updated_at: eventData.updated_at
             };
 
-            renderEventModal(event, props, canEdit, isAdmin, isOwner, isDirector);
+            renderEventModal(event, props, canEdit, isAdmin, isOwner);
             const modal = new bootstrap.Modal(document.getElementById('eventModal'));
             modal.show();
         })

@@ -1,142 +1,42 @@
-<h1 class="mb-4" style="font-size: 1.8rem; font-weight: 700; color: var(--dark-gray, #172033);">
-    🔍 Модерация мероприятий
-</h1>
+<h1 class="mb-4" style="font-size: 1.8rem; font-weight: 700; color: var(--dark-gray, #172033);">🔍 Модерация мероприятий</h1>
 
 {{#if events.length}}
-    <div class="row g-4">
-        {{#each events}}
-            <div class="col-md-6 col-lg-4">
-                <div class="card card-outline h-100" 
-                     data-event-id="{{id}}" 
-                     style="cursor: pointer;"
-                     onmouseover="this.style.transform='translateY(-3px)'"
-                     onmouseout="this.style.transform=''">
-                    <div class="card-header bg-transparent border-bottom-0 d-flex justify-content-between align-items-center pt-3 pb-0">
-                        <span class="badge" style="background-color: 
-                            {{#if (eq status "WAITING_ADMIN")}}#ffc107{{/if}}
-                            {{#if (eq status "WAITING_DIRECTOR")}}#fd7e14{{/if}}; 
-                            color: #fff; font-weight: 500; border-radius: 1rem; padding: 0.4rem 0.75rem;">
-                            {{#if (eq status "WAITING_ADMIN")}}
-                                ⏳ Ожидает админа
-                            {{else if (eq status "WAITING_DIRECTOR")}}
-                                ⏳ Ожидает директора
-                            {{else}}
-                                {{status}}
-                            {{/if}}
-                        </span>
-                        <span class="badge bg-secondary" style="font-weight: 500; border-radius: 1rem; padding: 0.4rem 0.75rem;">
-                            {{type_name}}
-                        </span>
-                    </div>
-                    <div class="card-body position-relative">
-                        <i class="bi bi-hand-index-thumb float-end text-muted opacity-50" style="font-size: 1.2rem;"></i>
-                        <h5 class="card-title fw-semibold" style="color: var(--dark-gray, #172033);">{{title}}</h5>
-                        <p class="card-text small text-muted">{{description}}</p>
-                        <div class="small text-muted">
-                            <div>📅 {{formatDate start_datetime}} — {{formatDate end_datetime}}</div>
-                            <div>👤 Создал: {{creator_name}}</div>
-                            <div>📍 {{location}}</div>
-                        </div>
-
-                        {{#if approvals}}
-                            <div class="small text-muted mt-2 pt-1 border-top">
-                                <strong>📋 Прогресс утверждения:</strong>
-                                <div class="mt-1">
-                                    {{#each approvals}}
-                                        <span class="badge 
-                                            {{#if (eq this.status "approved")}}bg-success{{/if}}
-                                            {{#if (eq this.status "rejected")}}bg-danger{{/if}}
-                                            {{#if (eq this.status "pending")}}bg-warning{{/if}}
-                                            me-1" style="font-weight:400; font-size:0.7rem; padding:0.3rem 0.6rem;">
-                                            {{this.user_name}} 
-                                            {{#if (eq this.role_type "admin")}}(Админ){{else}}(Директор){{/if}}
-                                            {{#if (eq this.status "approved")}}✅{{/if}}
-                                            {{#if (eq this.status "rejected")}}❌{{/if}}
-                                            {{#if (eq this.status "pending")}}⏳{{/if}}
-                                        </span>
-                                    {{/each}}
-                                </div>
-                            </div>
-                        {{/if}}
-                    </div>
-                    <div class="card-footer bg-white border-top-0 pt-0">
-                        <div class="d-flex flex-wrap gap-2" onclick="event.stopPropagation();">
-                            
-                            {{#if (eq ../userRole 5)}} {{!-- Администратор --}}
-                                {{#if (eq status "WAITING_ADMIN")}}
-                                    <form action="/events/admin-approve/{{id}}" method="POST" class="flex-grow-1">
-                                        <button type="submit" class="btn btn-success w-100 btn-sm fw-semibold">
-                                            ✅ Утвердить 
-                                        </button>
-                                    </form>
-                                    <button type="button" class="btn btn-danger btn-sm fw-semibold" onclick="openReasonModal({{id}}, 'reject')">
-                                        ❌ Отклонить
-                                    </button>
-                                {{/if}}
-                            {{/if}}
-
-                            {{#if (eq ../userRole 7)}} {{!-- Директор --}}
-                                {{#if (eq status "WAITING_DIRECTOR")}}
-                                    <form action="/events/director-approve/{{id}}" method="POST" class="flex-grow-1">
-                                        <button type="submit" class="btn btn-success w-100 btn-sm fw-semibold">
-                                            ✅ Утвердить
-                                        </button>
-                                    </form>
-                                    <button type="button" class="btn btn-danger btn-sm fw-semibold" onclick="openReasonModal({{id}}, 'reject')">
-                                        ❌ Отклонить
-                                    </button>
-                                {{/if}}
-                            {{/if}}
-
-                            {{#if (or (eq ../userRole 5) (eq ../userRole 7))}}
-                                {{#if (ne status "CANCELED")}}
-                                {{/if}}
-                            {{/if}}
-
-                        </div>
-                    </div>
-                </div>
+<div class="row g-4">
+    {{#each events}}
+    <div class="col-md-6 col-lg-4">
+        <div class="card card-outline h-100" data-event-id="{{id}}" style="cursor:pointer">
+            <div class="card-header bg-transparent border-bottom-0 d-flex justify-content-between align-items-center pt-3 pb-0">
+                <span class="badge bg-warning" style="color:#fff; font-weight:500; border-radius:1rem; padding:.4rem .75rem">⏳ Ожидает админов</span>
+                <span class="badge bg-secondary" style="font-weight:500; border-radius:1rem; padding:.4rem .75rem">{{type_name}}</span>
             </div>
-        {{/each}}
+            <div class="card-body">
+                <h5 class="card-title fw-semibold">{{title}}</h5><p class="card-text small text-muted">{{description}}</p>
+                <div class="small text-muted"><div>📅 {{formatDate start_datetime}} — {{formatDate end_datetime}}</div><div>👤 Создал: {{creator_name}}</div><div>📍 {{location}}</div></div>
+                {{#if approvals}}
+                <div class="small text-muted mt-2 pt-1 border-top"><strong>📋 Утверждения:</strong><div class="mt-1">
+                    {{#each approvals}}<span class="badge {{#if (eq status "approved")}}bg-success{{else if (eq status "rejected")}}bg-danger{{else}}bg-warning{{/if}} me-1" style="font-weight:400; font-size:.7rem; padding:.3rem .6rem">{{user_name}} (Админ) {{#if (eq status "approved")}}✅{{/if}}{{#if (eq status "rejected")}}❌{{/if}}{{#if (eq status "pending")}}⏳{{/if}}</span>{{/each}}
+                </div></div>{{/if}}
+            </div>
+            <div class="card-footer bg-white border-top-0 pt-0"><div class="d-flex flex-wrap gap-2" onclick="event.stopPropagation()">
+                <form action="/events/admin-approve/{{id}}" method="POST" class="flex-grow-1"><button type="submit" class="btn btn-success w-100 btn-sm fw-semibold">✅ Утвердить</button></form>
+                <button type="button" class="btn btn-danger btn-sm fw-semibold" onclick="openReasonModal({{id}}, 'reject')">❌ Отклонить</button>
+            </div></div>
+        </div>
     </div>
+    {{/each}}
+</div>
 {{else}}
-    <div class="alert alert-success border-0 shadow-sm" style="border-radius: 0.75rem;">
-        <h4 class="fw-semibold">✅ Все мероприятия проверены!</h4>
-        <p class="mb-0">Нет мероприятий, ожидающих модерации.</p>
-    </div>
+<div class="alert alert-success border-0 shadow-sm"><h4 class="fw-semibold">✅ Все мероприятия проверены!</h4><p class="mb-0">Нет мероприятий, ожидающих модерации.</p></div>
 {{/if}}
 
 <script>
-    function openReasonModal(eventId, action) {
-        // Используем существующую модалку для причины
-        // Здесь можно вызвать глобальную функцию openReasonModal из main.js
-        // или реализовать свою логику
-        if (typeof window.openReasonModal === 'function') {
-            window.openReasonModal(eventId, action);
-        } else {
-            // fallback: prompt
-            const reason = prompt('Укажите причину:');
-            if (reason !== null) {
-                const form = document.createElement('form');
-                form.method = 'POST';
-                if (action === 'reject') {
-                    form.action = `/events/reject/${eventId}`;
-                    const input = document.createElement('input');
-                    input.type = 'hidden';
-                    input.name = 'rejection_reason';
-                    input.value = reason;
-                    form.appendChild(input);
-                } else if (action === 'cancel') {
-                    form.action = `/events/cancel/${eventId}`;
-                    const input = document.createElement('input');
-                    input.type = 'hidden';
-                    input.name = 'cancel_reason';
-                    input.value = reason;
-                    form.appendChild(input);
-                }
-                document.body.appendChild(form);
-                form.submit();
-            }
-        }
-    }
+function openReasonModal(eventId, action) {
+    const reason = prompt('Укажите причину:');
+    if (reason === null) return;
+    const form = document.createElement('form');
+    form.method = 'POST'; form.action = `/events/${action}/${eventId}`;
+    const input = document.createElement('input'); input.type = 'hidden'; input.name = `${action}_reason`; input.value = reason;
+    if (action === 'reject') input.name = 'rejection_reason';
+    form.appendChild(input); document.body.appendChild(form); form.submit();
+}
 </script>

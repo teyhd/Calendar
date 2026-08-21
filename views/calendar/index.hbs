@@ -5,13 +5,12 @@
             <p class="text-muted">Планируйте и отслеживайте все школьные события</p>
         </div>
         <div class="col-md-6 text-md-end">
-            <!-- Кнопка создания для всех авторизованных -->
-            {{#if isAuthenticated}}
+            {{#if (or (eq user.type 2) (or (eq user.type 3) (or (eq user.type 4) (eq user.type 5))))}}
                 <a href="/events/create" class="btn btn-primary btn-lg me-2">
                     <i class="bi bi-plus-circle"></i> Создать мероприятие
                 </a>
             {{/if}}
-            {{#if (or (eq user.type 5) (eq user.type 7))}}
+            {{#if (eq user.type 5)}}
                 <a href="/events/moderation" class="btn btn-warning btn-lg">
                     <i class="bi bi-clock-history"></i> Модерация
                 </a>

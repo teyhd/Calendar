@@ -93,10 +93,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 .then(eventData => {
                     const isOwner = parseInt(eventData.created_by) === parseInt(userId);
                     const isAdmin = userRole === 5;
-                    const isDirector = userRole === 7;
-                    
-                    // Редактировать можно, если статус WAITING_ADMIN и пользователь является создателем или админ/директор
-                    const canEdit = (isAdmin || isDirector) || (isOwner && eventData.status === 'WAITING_ADMIN');
+                    const canEdit = isAdmin || (isOwner && eventData.status === 'WAITING_ADMIN');
 
                     const props = {
                         id: eventData.id,
@@ -118,7 +115,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         responsible_names: eventData.responsible_names || []
                     };
 
-                    renderEventModal(event, props, canEdit, isAdmin, isOwner, isDirector);
+                    renderEventModal(event, props, canEdit, isAdmin, isOwner);
                     const modal = new bootstrap.Modal(document.getElementById('eventModal'));
                     modal.show();
                 })
@@ -131,7 +128,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const status = info.event.extendedProps.status;
             const colors = {
                 'WAITING_ADMIN': '#ffc107',
-                'WAITING_DIRECTOR': '#fd7e14',
                 'APPROVED': '#28a745',
                 'REJECTED': '#dc3545',
                 'CANCELED': '#6c757d',
@@ -185,7 +181,7 @@ function loadStats() {
         .then(events => {
             const total = events.length;
             const approved = events.filter(e => e.status === 'APPROVED').length;
-            const pending = events.filter(e => e.status === 'WAITING_ADMIN' || e.status === 'WAITING_DIRECTOR').length;
+            const pending = events.filter(e => e.status === 'WAITING_ADMIN').length;
             const myParticipations = events.filter(e => e.created_by == window.currentUserId).length;
 
             const elTotal = document.getElementById('totalEvents');
@@ -204,7 +200,7 @@ function loadStats() {
 // ================================================================
 // === ФУНКЦИЯ ОТОБРАЖЕНИЯ МОДАЛЬНОГО ОКНА ===
 // ================================================================
-function renderEventModal(event, props, canEdit, isAdmin, isOwner, isDirector) {
+function renderEventModal(event, props, canEdit, isAdmin, isOwner) {
     const modalBody = document.getElementById('eventModalBody');
     const modalFooter = document.getElementById('eventModalFooter');
     const modalTitle = document.getElementById('eventModalLabel');
@@ -222,7 +218,6 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner, isDirector) {
 
     const statusColors = {
         'WAITING_ADMIN': 'warning',
-        'WAITING_DIRECTOR': 'warning',
         'APPROVED': 'success',
         'REJECTED': 'danger',
         'CANCELED': 'secondary',
@@ -231,7 +226,6 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner, isDirector) {
     };
     const statusTexts = {
         'WAITING_ADMIN': 'Ожидает админа',
-        'WAITING_DIRECTOR': 'Ожидает директора',
         'APPROVED': 'Опубликовано',
         'REJECTED': 'Отклонено',
         'CANCELED': 'Отменено',
@@ -246,7 +240,7 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner, isDirector) {
     const isRegistrationEnabled = props.is_registration_enabled === 1 || props.is_registration_enabled === true;
     const showParticipants = isOwner || isAdmin;
     const userRole = parseInt(window.currentUserRole);
-    const showApprovals = userRole === 5 || userRole === 7;
+    const showApprovals = userRole === 5;
 
     // Ответственные
     let responsibleHtml = '';
@@ -351,7 +345,7 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner, isDirector) {
                             <span class="badge bg-${statusColor} fs-6" style="font-size: 1rem; padding: 0.4rem 1rem; border-radius: 1rem;">
                                 ${statusText}
                             </span>
-                            ${props.status === 'WAITING_ADMIN' || props.status === 'WAITING_DIRECTOR' ? `
+                            ${props.status === 'WAITING_ADMIN' ? `
                                 <div class="alert alert-warning border-0 small mt-2 mb-0">
                                     ⏳ Мероприятие ожидает утверждения.
                                 </div>
@@ -415,7 +409,7 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner, isDirector) {
                         list.innerHTML = '<span class="text-muted">Нет участников</span>';
                     } else {
                         list.innerHTML = participants.map(p => 
-                            `<div class="py-1 border-bottom border-light">👤 ${p.name} ${p.class_name ? '(' + p.class_name + ')' : ''}</div>`
+                            `<div class="py-1 border-bottom border-light">👤 ${p.user_name} ${p.class_name ? '(' + p.class_name + ')' : ''}</div>`
                         ).join('');
                     }
                 })
@@ -443,7 +437,7 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner, isDirector) {
                     approvals.forEach(a => {
                         const statusIcon = a.status === 'approved' ? '✅' : 
                                            a.status === 'rejected' ? '❌' : '⏳';
-                        const roleLabel = a.role_type === 'admin' ? 'Админ' : 'Директор';
+                        const roleLabel = 'Админ';
                         html += `
                             <li class="py-1 border-bottom border-light d-flex justify-content-between align-items-center">
                                 <span>
@@ -491,8 +485,8 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner, isDirector) {
         `;
     }
 
-    // Кнопка "Отменить" — только для администратора или директора
-    if ((isAdmin || isDirector) && (props.status === 'APPROVED' || props.status === 'WAITING_ADMIN' || props.status === 'WAITING_DIRECTOR')) {
+    // Кнопка "Отменить" — только для администратора.
+    if (isAdmin && (props.status === 'APPROVED' || props.status === 'WAITING_ADMIN')) {
         footerButtons += `
             <button type="button" class="btn btn-danger" onclick="openReasonModal(${event.id}, 'cancel')">
                 ❌ Отменить мероприятие
@@ -500,7 +494,7 @@ function renderEventModal(event, props, canEdit, isAdmin, isOwner, isDirector) {
         `;
     }
 
-    if (isAdmin && (props.status === 'WAITING_ADMIN' || props.status === 'WAITING_DIRECTOR')) {
+    if (isAdmin && props.status === 'WAITING_ADMIN') {
         footerButtons += `
             <a href="/events/moderation" class="btn btn-warning">
                 🔍 Модерация

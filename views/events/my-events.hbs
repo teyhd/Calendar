@@ -43,7 +43,7 @@
                                 </div>
                             </div>
                         {{else if (eq status "APPROVED")}}
-                            {{#if (or (eq ../user.type 5) (eq ../user.type 7))}}
+                            {{#if (eq ../user.type 5)}}
                                 <button class="btn btn-danger btn-sm w-100 fw-semibold" onclick="event.stopPropagation(); openReasonModal({{id}}, 'cancel')">
                                     ❌ Отменить мероприятие
                                 </button>
