@@ -12,6 +12,11 @@ const ROLE_NAMES = {
     6: 'Родитель'
 };
 
+const PERSON_FIELDS = 'u.id, u.name, u.type, u.kaf, k.name AS kaf_name, rn.name AS role_name';
+const PERSON_JOINS = `
+    LEFT JOIN kaf_name k ON k.id = u.kaf
+    LEFT JOIN role_name rn ON rn.id = u.type`;
+
 function uniquePositiveIds(values) {
     return [...new Set((Array.isArray(values) ? values : String(values || '').split(','))
         .map((value) => Number(value))
@@ -26,6 +31,32 @@ function activeUserFilter(alias = 'u') {
     return `${alias}.lifecycle_state = 'active' AND ${alias}.type IN (${CALENDAR_ROLE_IDS.join(', ')})`;
 }
 
+function calendarServiceId() {
+    const serviceId = Number(process.env.SSO_SERVICE_ID);
+    if (!Number.isInteger(serviceId) || serviceId <= 0) throw new Error('SSO_SERVICE_ID is not configured');
+    return serviceId;
+}
+
+/**
+ * Service access is read from the SSO source of truth.  The role on the
+ * Calendar right must match the user's primary SSO role and be allowed by
+ * the service policy.
+ */
+function calendarAccessFilter(alias = 'u') {
+    return `EXISTS (
+        SELECT 1
+          FROM rights calendar_right
+          JOIN srvs calendar_service ON calendar_service.id = calendar_right.srv_id
+          JOIN srvs_roles calendar_service_role
+            ON calendar_service_role.srvs_id = calendar_service.id
+           AND calendar_service_role.role_id = calendar_right.role_id
+         WHERE calendar_right.usr_id = ${alias}.id
+           AND calendar_right.role_id = ${alias}.type
+           AND calendar_service.id = ?
+           AND calendar_service.name = 'calendar'
+    )`;
+}
+
 function mapPerson(row) {
     return {
         id: Number(row.id),
@@ -33,7 +64,7 @@ function mapPerson(row) {
         type: Number(row.type),
         kaf: row.kaf == null ? null : Number(row.kaf),
         kaf_name: row.kaf_name || null,
-        role_name: ROLE_NAMES[Number(row.type)] || 'Пользователь'
+        role_name: row.role_name || ROLE_NAMES[Number(row.type)] || 'Пользователь'
     };
 }
 
@@ -44,41 +75,48 @@ export function roleName(roleId) {
 export async function getActiveUserById(userId) {
     const id = Number(userId);
     if (!Number.isInteger(id) || id <= 0) return null;
+    const serviceId = calendarServiceId();
     const [rows] = await ssoPool.query(`
-        SELECT u.id, u.name, u.type, u.kaf, k.name AS kaf_name
+        SELECT ${PERSON_FIELDS}
           FROM users u
-          LEFT JOIN kaf_name k ON k.id = u.kaf
-         WHERE u.id = ? AND ${activeUserFilter('u')}
+          ${PERSON_JOINS}
+         WHERE u.id = ?
+           AND ${activeUserFilter('u')}
+           AND ${calendarAccessFilter('u')}
          LIMIT 1
-    `, [id]);
+    `, [id, serviceId]);
     return rows[0] ? mapPerson(rows[0]) : null;
 }
 
 export async function getActiveUsersByIds(ids) {
     const normalized = uniquePositiveIds(ids);
     if (!normalized.length) return [];
+    const serviceId = calendarServiceId();
     const [rows] = await ssoPool.query(`
-        SELECT u.id, u.name, u.type, u.kaf, k.name AS kaf_name
+        SELECT ${PERSON_FIELDS}
           FROM users u
-          LEFT JOIN kaf_name k ON k.id = u.kaf
+          ${PERSON_JOINS}
          WHERE u.id IN (${placeholders(normalized)})
            AND ${activeUserFilter('u')}
+           AND ${calendarAccessFilter('u')}
          ORDER BY u.name, u.id
-    `, normalized);
+    `, [...normalized, serviceId]);
     return rows.map(mapPerson);
 }
 
 export async function listActiveUsers(roleIds = CALENDAR_ROLE_IDS) {
     const roles = uniquePositiveIds(roleIds).filter((id) => CALENDAR_ROLE_IDS.includes(id));
     if (!roles.length) return [];
+    const serviceId = calendarServiceId();
     const [rows] = await ssoPool.query(`
-        SELECT u.id, u.name, u.type, u.kaf, k.name AS kaf_name
+        SELECT ${PERSON_FIELDS}
           FROM users u
-          LEFT JOIN kaf_name k ON k.id = u.kaf
+          ${PERSON_JOINS}
          WHERE u.lifecycle_state = 'active'
            AND u.type IN (${placeholders(roles)})
+           AND ${calendarAccessFilter('u')}
          ORDER BY u.name, u.id
-    `, roles);
+    `, [...roles, serviceId]);
     return rows.map(mapPerson);
 }
 
@@ -108,29 +146,33 @@ export async function getKafById(id, expectedType) {
 export async function getChildrenForParent(parentId) {
     const id = Number(parentId);
     if (!Number.isInteger(id) || id <= 0) return [];
+    const serviceId = calendarServiceId();
     const [rows] = await ssoPool.query(`
-        SELECT u.id, u.name, u.type, u.kaf, k.name AS kaf_name
+        SELECT ${PERSON_FIELDS}
           FROM parents_kids pk
           JOIN users u ON u.id = pk.kid_id
-          LEFT JOIN kaf_name k ON k.id = u.kaf
+          ${PERSON_JOINS}
          WHERE pk.parent_id = ?
            AND u.lifecycle_state = 'active'
            AND u.type = 1
+           AND ${calendarAccessFilter('u')}
          ORDER BY u.name, u.id
-    `, [id]);
+    `, [id, serviceId]);
     return rows.map(mapPerson);
 }
 
 export async function getCalendarAdmins() {
-    const serviceId = Number(process.env.SSO_SERVICE_ID);
-    if (!Number.isInteger(serviceId) || serviceId <= 0) throw new Error('SSO_SERVICE_ID is not configured');
+    const serviceId = calendarServiceId();
     const [rows] = await ssoPool.query(`
-        SELECT DISTINCT u.id, u.name, u.type, u.kaf, k.name AS kaf_name
+        SELECT DISTINCT ${PERSON_FIELDS}
           FROM rights r
+          JOIN srvs srv ON srv.id = r.srv_id AND srv.name = 'calendar'
+          JOIN srvs_roles srv_role ON srv_role.srvs_id = srv.id AND srv_role.role_id = r.role_id
           JOIN users u ON u.id = r.usr_id
-          LEFT JOIN kaf_name k ON k.id = u.kaf
+          ${PERSON_JOINS}
          WHERE r.srv_id = ?
            AND r.role_id = 5
+           AND u.type = 5
            AND ${activeUserFilter('u')}
          ORDER BY u.id
     `, [serviceId]);
@@ -142,14 +184,16 @@ export async function assertActiveUsers(ids, allowedRoles = CALENDAR_ROLE_IDS) {
     if (!normalized.length) return [];
     const allowed = uniquePositiveIds(allowedRoles).filter((id) => CALENDAR_ROLE_IDS.includes(id));
     if (!allowed.length) return [];
+    const serviceId = calendarServiceId();
     const [rows] = await ssoPool.query(`
-        SELECT u.id, u.name, u.type, u.kaf, k.name AS kaf_name
+        SELECT ${PERSON_FIELDS}
           FROM users u
-          LEFT JOIN kaf_name k ON k.id = u.kaf
+          ${PERSON_JOINS}
          WHERE u.id IN (${placeholders(normalized)})
            AND u.lifecycle_state = 'active'
            AND u.type IN (${placeholders(allowed)})
-    `, [...normalized, ...allowed]);
+           AND ${calendarAccessFilter('u')}
+    `, [...normalized, ...allowed, serviceId]);
     const people = rows.map(mapPerson);
     if (people.length !== normalized.length) throw new Error('Выбранный пользователь недоступен в SSO');
     return people;
