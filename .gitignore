@@ -1,4 +1,47 @@
+# Dependencies
 node_modules/
+
+# Local environment and operational credentials
 .env
-sql/
+.env.*
+!.env.example
+!.env.sample
+.envrc
+AGENTS.local.md
+
+# Runtime output
 logs/
+*.log
+logs/**/*.log
+*.pid
+*.pid.lock
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Test and build artefacts
+coverage/
+.nyc_output/
+dist/
+build/
+.cache/
+.tmp/
+tmp/
+
+# Local credentials and certificates
+credentials.json
+service-account*.json
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Editor and operating-system files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
