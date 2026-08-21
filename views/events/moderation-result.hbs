@@ -1,0 +1,27 @@
+<section class="app-page-head">
+    <div>
+        <p class="app-page-kicker">Модерация</p>
+        <h1 class="app-page-title">{{outcome.title}}</h1>
+        <p class="app-page-summary">{{outcome.message}}</p>
+    </div>
+</section>
+
+<section class="app-surface app-surface-pad">
+    <div class="app-detail-layout">
+        <div>
+            <div class="app-detail-statuses">
+                <span class="app-status app-status-{{outcome.statusClass}}">{{statusText event.status}}</span>
+                <span class="app-type">Решение сохранено</span>
+            </div>
+            <h2 class="app-section-title">{{event.title}}</h2>
+            <p class="app-help">Этот экран показывает актуальный статус даже после повторного нажатия кнопки или одновременного решения другого администратора.</p>
+        </div>
+        <aside class="app-detail-aside">
+            <section class="app-detail-panel">
+                <h3>Следующий шаг</h3>
+                <a class="app-btn app-btn-primary" href="{{outcome.nextHref}}">{{outcome.nextLabel}}</a>
+                <a class="app-btn app-btn-secondary" href="/events/moderation">К очереди модерации</a>
+            </section>
+        </aside>
+    </div>
+</section>

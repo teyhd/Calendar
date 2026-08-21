@@ -485,29 +485,95 @@ async function approvalsForEvents(eventIds) {
     return result;
 }
 
+function moderationOutcome(status) {
+    const outcomes = {
+        APPROVED: {
+            statusClass: 'approved',
+            title: 'Мероприятие утверждено и опубликовано',
+            message: 'Оно уже доступно целевой аудитории в календаре.',
+            nextHref: '/',
+            nextLabel: 'Открыть календарь'
+        },
+        REJECTED: {
+            statusClass: 'rejected',
+            title: 'Мероприятие отклонено',
+            message: 'Создатель получил уведомление с причиной и может исправить заявку.',
+            nextHref: '/events/moderation',
+            nextLabel: 'Вернуться к очереди'
+        },
+        CANCELED: {
+            statusClass: 'canceled',
+            title: 'Мероприятие отменено',
+            message: 'Оно больше не находится в очереди модерации.',
+            nextHref: '/events/moderation',
+            nextLabel: 'Вернуться к очереди'
+        },
+        COMPLETED: {
+            statusClass: 'completed',
+            title: 'Мероприятие завершено',
+            message: 'Оно находится в архиве мероприятий.',
+            nextHref: '/events/archive',
+            nextLabel: 'Открыть архив'
+        },
+        WAITING_ADMIN: {
+            statusClass: 'waiting',
+            title: 'Мероприятие ожидает решения',
+            message: 'Откройте очередь модерации, чтобы утвердить или отклонить его.',
+            nextHref: '/events/moderation',
+            nextLabel: 'Открыть очередь'
+        }
+    };
+    return outcomes[status] || {
+        statusClass: 'draft',
+        title: 'Статус мероприятия изменился',
+        message: 'Проверьте актуальную информацию в календаре.',
+        nextHref: '/',
+        nextLabel: 'Открыть календарь'
+    };
+}
+
+app.get('/events/moderation/result/:id', requirePageAuth, requirePermission('moderate_event'), async (req, res) => {
+    try {
+        const event = await getEvent(req.params.id);
+        if (!event) return pageError(res, 404, 'Мероприятие не найдено');
+        res.render('events/moderation-result', { title: 'Результат модерации', event, outcome: moderationOutcome(event.status) });
+    } catch (error) { pageError(res, 500, 'Не удалось получить результат модерации'); }
+});
+
 app.post('/events/admin-approve/:id', requirePageAuth, requirePermission('moderate_event'), async (req, res) => {
     const eventId = Number(req.params.id);
     try {
         const connection = await pool.getConnection();
         let event;
+        let publishedNow = false;
         try {
             await connection.beginTransaction();
             const [events] = await connection.query('SELECT id, title, created_by, status FROM events WHERE id = ? FOR UPDATE', [eventId]);
             event = events[0];
-            if (!event || event.status !== 'WAITING_ADMIN') throw new Error('Мероприятие не ожидает утверждения');
-            const [approvals] = await connection.query("SELECT id, status FROM event_approvals WHERE event_id = ? AND user_id = ? AND role_type = 'admin' FOR UPDATE", [eventId, user(req).id]);
-            if (!approvals[0] || approvals[0].status !== 'pending') throw new Error('У вас нет ожидающего утверждения');
-            await connection.query("UPDATE event_approvals SET status = 'approved' WHERE id = ?", [approvals[0].id]);
-            await connection.query("DELETE FROM event_approvals WHERE event_id = ? AND id <> ? AND status = 'pending'", [eventId, approvals[0].id]);
-            await connection.query("UPDATE events SET status = 'APPROVED', approved_by = ? WHERE id = ? AND status = 'WAITING_ADMIN'", [user(req).id, eventId]);
+            if (!event) throw new Error('Мероприятие не найдено');
+            if (event.status === 'WAITING_ADMIN') {
+                const [approvals] = await connection.query("SELECT id, status FROM event_approvals WHERE event_id = ? AND user_id = ? AND role_type = 'admin' FOR UPDATE", [eventId, user(req).id]);
+                let approval = approvals[0];
+                if (!approval) {
+                    const [result] = await connection.query("INSERT INTO event_approvals (event_id, user_id, role_type, status, order_index) VALUES (?, ?, 'admin', 'approved', 0)", [eventId, user(req).id]);
+                    approval = { id: result.insertId, status: 'approved' };
+                } else if (!['pending', 'approved'].includes(approval.status)) {
+                    throw new Error('У вас нет права утвердить мероприятие');
+                }
+                if (approval.status === 'pending') {
+                    await connection.query("UPDATE event_approvals SET status = 'approved' WHERE id = ?", [approval.id]);
+                }
+                await connection.query("DELETE FROM event_approvals WHERE event_id = ? AND id <> ? AND status = 'pending'", [eventId, approval.id]);
+                await connection.query("UPDATE events SET status = 'APPROVED', approved_by = ? WHERE id = ? AND status = 'WAITING_ADMIN'", [user(req).id, eventId]);
+                publishedNow = true;
+            }
             await connection.commit();
         } catch (error) { await connection.rollback(); throw error; } finally { connection.release(); }
-        const eventNow = await getEvent(eventId);
-        if (eventNow.status === 'APPROVED') {
+        if (publishedNow) {
             await createNotification(event.created_by, eventId, 'approved', `Мероприятие «${event.title}» утверждено и опубликовано.`);
             await notifyAdmins(eventId, 'approved', `Мероприятие «${event.title}» утверждено и опубликовано.`, user(req).id);
         }
-        res.redirect('/events/moderation');
+        res.redirect(303, `/events/moderation/result/${eventId}`);
     } catch (error) { pageError(res, 400, error.message || 'Ошибка сервера'); }
 });
 
@@ -517,20 +583,31 @@ app.post('/events/reject/:id', requirePageAuth, requirePermission('moderate_even
     try {
         const connection = await pool.getConnection();
         let event;
+        let rejectedNow = false;
         try {
             await connection.beginTransaction();
             const [events] = await connection.query('SELECT id, title, created_by, status FROM events WHERE id = ? FOR UPDATE', [eventId]);
             event = events[0];
-            if (!event || event.status !== 'WAITING_ADMIN') throw new Error('Мероприятие нельзя отклонить');
-            const [approvals] = await connection.query("SELECT id, status FROM event_approvals WHERE event_id = ? AND user_id = ? AND role_type = 'admin' FOR UPDATE", [eventId, user(req).id]);
-            if (!approvals[0] || approvals[0].status !== 'pending') throw new Error('У вас нет права отклонить мероприятие');
-            await connection.query("UPDATE event_approvals SET status = 'rejected', comment = ? WHERE id = ?", [reason, approvals[0].id]);
-            await connection.query("UPDATE events SET status = 'REJECTED', rejected_by = ?, rejected_at = NOW(), rejection_reason = ? WHERE id = ?", [user(req).id, reason, eventId]);
+            if (!event) throw new Error('Мероприятие не найдено');
+            if (event.status === 'WAITING_ADMIN') {
+                const [approvals] = await connection.query("SELECT id, status FROM event_approvals WHERE event_id = ? AND user_id = ? AND role_type = 'admin' FOR UPDATE", [eventId, user(req).id]);
+                const approval = approvals[0];
+                if (!approval) {
+                    await connection.query("INSERT INTO event_approvals (event_id, user_id, role_type, status, comment, order_index) VALUES (?, ?, 'admin', 'rejected', ?, 0)", [eventId, user(req).id, reason]);
+                } else {
+                    if (approval.status !== 'pending') throw new Error('У вас нет права отклонить мероприятие');
+                    await connection.query("UPDATE event_approvals SET status = 'rejected', comment = ? WHERE id = ?", [reason, approval.id]);
+                }
+                await connection.query("UPDATE events SET status = 'REJECTED', rejected_by = ?, rejected_at = NOW(), rejection_reason = ? WHERE id = ?", [user(req).id, reason, eventId]);
+                rejectedNow = true;
+            }
             await connection.commit();
         } catch (error) { await connection.rollback(); throw error; } finally { connection.release(); }
-        await createNotification(event.created_by, eventId, 'rejected', `Мероприятие «${event.title}» отклонено. Причина: ${reason}`);
-        await notifyAdmins(eventId, 'rejected', `Мероприятие «${event.title}» отклонено администратором ${user(req).name}.`, user(req).id);
-        res.redirect('/events/moderation');
+        if (rejectedNow) {
+            await createNotification(event.created_by, eventId, 'rejected', `Мероприятие «${event.title}» отклонено. Причина: ${reason}`);
+            await notifyAdmins(eventId, 'rejected', `Мероприятие «${event.title}» отклонено администратором ${user(req).name}.`, user(req).id);
+        }
+        res.redirect(303, `/events/moderation/result/${eventId}`);
     } catch (error) { pageError(res, 400, error.message || 'Ошибка сервера'); }
 });
 
