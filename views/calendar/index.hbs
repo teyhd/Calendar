@@ -1,114 +1,27 @@
-<div class="dashboard-header">
-    <div class="row align-items-center">
-        <div class="col-md-6">
-            <h1 class="mb-0">Календарь мероприятий</h1>
-            <p class="text-muted">Планируйте и отслеживайте все школьные события</p>
-        </div>
-        <div class="col-md-6 text-md-end">
-            {{#if (or (eq user.type 2) (or (eq user.type 3) (or (eq user.type 4) (eq user.type 5))))}}
-                <a href="/events/create" class="btn btn-primary btn-lg me-2">
-                    <i class="bi bi-plus-circle"></i> Создать мероприятие
-                </a>
-            {{/if}}
-            {{#if (eq user.type 5)}}
-                <a href="/events/moderation" class="btn btn-warning btn-lg">
-                    <i class="bi bi-clock-history"></i> Модерация
-                </a>
-            {{/if}}
-        </div>
+<section class="app-page-head">
+    <div>
+        <p class="app-page-kicker">Школьное пространство</p>
+        <h1 class="app-page-title">Календарь мероприятий</h1>
+        <p class="app-page-summary">Единое расписание школьных инициатив, встреч и событий.</p>
     </div>
-</div>
+    <div class="app-actions-row">
+        {{#if user.permissions.create_event}}<a class="app-btn app-btn-primary" href="/events/create">Создать мероприятие</a>{{/if}}
+        {{#if user.permissions.moderate_event}}<a class="app-btn app-btn-secondary" href="/events/moderation">Открыть модерацию</a>{{/if}}
+    </div>
+</section>
 
-<!-- Виджеты статистики -->
-<div class="row g-4 mb-4">
-    <div class="col-md-3 col-sm-6">
-        <div class="stat-card">
-            <div class="stat-icon bg-primary">
-                <i class="bi bi-calendar-event"></i>
-            </div>
-            <div class="stat-info">
-                <span class="stat-label">Всего мероприятий</span>
-                <span class="stat-number" id="totalEvents">0</span>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3 col-sm-6">
-        <div class="stat-card">
-            <div class="stat-icon bg-success">
-                <i class="bi bi-check-circle"></i>
-            </div>
-            <div class="stat-info">
-                <span class="stat-label">Опубликовано</span>
-                <span class="stat-number" id="approvedEvents">0</span>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3 col-sm-6">
-        <div class="stat-card">
-            <div class="stat-icon bg-warning">
-                <i class="bi bi-hourglass-split"></i>
-            </div>
-            <div class="stat-info">
-                <span class="stat-label">На модерации</span>
-                <span class="stat-number" id="pendingEvents">0</span>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3 col-sm-6">
-        <div class="stat-card">
-            <div class="stat-icon bg-info">
-                <i class="bi bi-person-check"></i>
-            </div>
-            <div class="stat-info">
-                <span class="stat-label">Моих участий</span>
-                <span class="stat-number" id="myParticipations">0</span>
-            </div>
-        </div>
-    </div>
-</div>
+<section class="app-stat-grid" aria-label="Сводная статистика">
+    <div class="app-stat"><span class="app-stat-label">Всего мероприятий</span><span class="app-stat-value" id="totalEvents">0</span></div>
+    <div class="app-stat"><span class="app-stat-label">Опубликовано</span><span class="app-stat-value" id="approvedEvents">0</span></div>
+    <div class="app-stat"><span class="app-stat-label">На модерации</span><span class="app-stat-value" id="pendingEvents">0</span></div>
+    <div class="app-stat"><span class="app-stat-label">Моих участий</span><span class="app-stat-value" id="myParticipations">0</span></div>
+</section>
 
-<!-- Панель фильтров -->
-<div class="filter-panel card shadow-sm mb-4">
-    <div class="card-body">
-        <div class="row g-3">
-            <div class="col-md-4">
-                <div class="input-group">
-                    <span class="input-group-text"><i class="bi bi-search"></i></span>
-                    <input type="text" class="form-control" id="searchInput" placeholder="Поиск по названию...">
-                </div>
-            </div>
-            <div class="col-md-3">
-                <select class="form-select" id="filterStatus">
-                    <option value="all">Все статусы</option>
-                    <option value="APPROVED">Опубликованные</option>
-                    <option value="WAITING">На модерации</option>
-                </select>
-            </div>
-            <div class="col-md-3">
-                <select class="form-select" id="filterType">
-                    <option value="all">Все типы</option>
-                    {{#each types}}
-                        <option value="{{id}}">{{name}}</option>
-                    {{/each}}
-                </select>
-            </div>
-            <div class="col-md-2">
-                <button class="btn btn-outline-secondary w-100" id="resetFiltersBtn">
-                    <i class="bi bi-arrow-counterclockwise"></i> Сбросить
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
+<section class="app-surface app-filter-bar" aria-label="Фильтры календаря">
+    <label class="app-field"><span class="app-label">Поиск</span><input class="app-input" type="search" id="searchInput" placeholder="Название или место"></label>
+    <label class="app-field"><span class="app-label">Статус</span><select class="app-select" id="filterStatus"><option value="all">Все статусы</option><option value="APPROVED">Опубликованные</option><option value="WAITING">На модерации</option></select></label>
+    <label class="app-field"><span class="app-label">Тип</span><select class="app-select" id="filterType"><option value="all">Все типы</option>{{#each types}}<option value="{{id}}">{{name}}</option>{{/each}}</select></label>
+    <div class="app-field"><span class="app-label">&nbsp;</span><button class="app-btn app-btn-secondary" type="button" id="resetFiltersBtn">Сбросить</button></div>
+</section>
 
-<!-- Календарь -->
-<div id="calendar" class="shadow-sm rounded-3 p-3 bg-white"></div>
-
-<script>
-    function changeView(viewName) {
-        const calendar = document.getElementById('calendar');
-        if (calendar && calendar._calendar) {
-            calendar._calendar.changeView(viewName);
-        }
-    }
-</script>
+<section class="app-surface app-surface-pad" aria-label="Календарь"><div id="calendar"></div></section>

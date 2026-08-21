@@ -1,75 +1,15 @@
-<h1 class="mb-4" style="font-size: 1.8rem; font-weight: 700; color: var(--dark-gray, #172033);">
-    🔔 Все уведомления
-</h1>
-
-<div class="d-flex gap-2 mb-3 flex-wrap">
-    <a href="/" class="btn btn-outline-secondary">
-        <i class="bi bi-arrow-left"></i> Назад
-    </a>
-    {{#if allNotifications.length}}
-        <form action="/notifications/mark-all-read" method="POST" style="display:inline;">
-            <button type="submit" class="btn btn-primary">
-                <i class="bi bi-check2-all"></i> Пометить все как прочитанные
-            </button>
-        </form>
-    {{/if}}
-</div>
-
+<section class="app-page-head"><div><p class="app-page-kicker">Личный раздел</p><h1 class="app-page-title">Уведомления</h1><p class="app-page-summary">Системные сообщения о мероприятиях и действиях с ними.</p></div><div class="app-actions-row"><a href="/" class="app-btn app-btn-secondary">К календарю</a>{{#if allNotifications.length}}<form action="/notifications/mark-all-read" method="POST"><button type="submit" class="app-btn app-btn-primary">Отметить все прочитанными</button></form>{{/if}}</div></section>
 {{#if allNotifications.length}}
-    <div class="row g-3">
-        {{#each allNotifications}}
-            <div class="col-12">
-                <div class="card shadow-sm border-0">
-                    <div class="card-body d-flex justify-content-between align-items-start">
-                        <div class="flex-grow-1 me-3">
-                            <p class="mb-1" style="color: var(--dark-gray);">
-                                {{#if (eq this.type "reminder")}}
-                                    
-                                {{/if}}
-                                {{this.message}}
-                            </p>
-                            <div class="d-flex align-items-center gap-2">
-                                <small class="text-muted">{{formatDate this.created_at}}</small>
-                                {{#unless this.is_read}}
-                                    <span class="badge bg-primary" style="font-weight: 500; border-radius: 1rem; padding: 0.3rem 0.6rem;">Новое</span>
-                                {{/unless}}
-                            </div>
-                        </div>
-                        {{#unless this.is_read}}
-                            <button class="btn btn-sm btn-outline-primary mark-read-btn" data-id="{{this.id}}" title="Пометить прочитанным">
-                                <i class="bi bi-check-lg"></i>
-                            </button>
-                        {{/unless}}
-                    </div>
-                </div>
-            </div>
-        {{/each}}
-    </div>
-{{else}}
-    <div class="alert alert-info border-0 shadow-sm" style="border-radius: 0.75rem;">
-        <p class="mb-0">У вас нет уведомлений.</p>
-    </div>
-{{/if}}
-
+<section class="app-event-list" aria-label="Все уведомления">
+    {{#each allNotifications}}<article class="app-event-row"><div><span class="app-event-title">{{message}}</span><span class="app-event-description">{{formatDate created_at}}</span></div><div>{{#unless is_read}}<span class="app-status app-status-completed">Новое</span>{{else}}<span class="app-help">Прочитано</span>{{/unless}}</div><div></div><div>{{#unless is_read}}<button class="app-btn app-btn-secondary app-btn-sm mark-read-btn" type="button" data-id="{{id}}">Прочитано</button>{{/unless}}</div></article>{{/each}}
+</section>
+{{else}}<section class="app-surface app-empty"><h2>Уведомлений нет</h2><p>Новые сообщения будут показаны здесь.</p></section>{{/if}}
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        document.querySelectorAll('.mark-read-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const id = this.dataset.id;
-                fetch(`/notifications/mark-read/${id}`, { method: 'POST' })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            location.reload();
-                        } else {
-                            alert('Ошибка при пометке уведомления');
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Ошибка:', error);
-                        alert('Ошибка сервера');
-                    });
-            });
-        });
-    });
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.mark-read-btn').forEach((button) => button.addEventListener('click', () => {
+        fetch(`/notifications/mark-read/${encodeURIComponent(button.dataset.id)}`, { method: 'POST' })
+            .then((response) => response.json()).then((data) => { if (data.success) window.location.reload(); else throw new Error('Не удалось обновить уведомление'); })
+            .catch((error) => window.alert(error.message || 'Ошибка сервера'));
+    }));
+});
 </script>

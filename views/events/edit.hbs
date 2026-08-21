@@ -1,12 +1,10 @@
-<h1 class="mb-4" style="font-size: 1.8rem; font-weight: 700; color: var(--dark-gray, #172033);">
-    ✏️ Редактирование мероприятия
-</h1>
+<section class="app-page-head"><div><p class="app-page-kicker">Рабочая версия</p><h1 class="app-page-title">Редактирование мероприятия</h1><p class="app-page-summary">Проверьте сведения перед повторной отправкой на модерацию.</p></div></section>
 
-<div class="row g-4">
+<div class="app-form-layout">
     <div class="col-md-8">
         <div class="card shadow-sm border-0">
             <div class="card-body">
-                <form action="/events/edit/{{event.id}}" method="POST" id="eventForm">
+                <form class="event-form" action="/events/edit/{{event.id}}" method="POST" id="eventForm">
                     <!-- Основная информация -->
                     <div class="mb-3">
                         <label for="title" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Название *</label>
@@ -34,11 +32,11 @@
                             <div class="mb-3">
                                 <label for="level" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Уровень</label>
                                 <select class="form-select" id="level" name="level">
-                                    <option value="school" {{#if (eq event.level "school")}}selected{{/if}}>🏫 Школьное</option>
-                                    <option value="city" {{#if (eq event.level "city")}}selected{{/if}}>🏙️ Городское</option>
-                                    <option value="regional" {{#if (eq event.level "regional")}}selected{{/if}}>🌍 Региональное</option>
-                                    <option value="national" {{#if (eq event.level "national")}}selected{{/if}}>🇷🇺 Всероссийское</option>
-                                    <option value="international" {{#if (eq event.level "international")}}selected{{/if}}>🌐 Международное</option>
+                                    <option value="school" {{#if (eq event.level "school")}}selected{{/if}}>Школьное</option>
+                                    <option value="city" {{#if (eq event.level "city")}}selected{{/if}}>Городское</option>
+                                    <option value="regional" {{#if (eq event.level "regional")}}selected{{/if}}>Региональное</option>
+                                    <option value="national" {{#if (eq event.level "national")}}selected{{/if}}>Всероссийское</option>
+                                    <option value="international" {{#if (eq event.level "international")}}selected{{/if}}>Международное</option>
                                 </select>
                             </div>
                         </div>
@@ -67,7 +65,7 @@
                     <!-- Блок: Аудитория -->
                     <div class="block-outline mb-3">
                         <div class="card-header bg-transparent border-bottom-0 pt-2 pb-0 px-0">
-                            <h6 class="mb-0 fw-semibold" style="color: var(--dark-gray, #172033);">👥 Кто увидит мероприятие?</h6>
+                            <h6 class="mb-0 fw-semibold" style="color: var(--dark-gray, #172033);">Аудитория мероприятия</h6>
                         </div>
                         <div class="card-body px-0 pb-0">
                             <div class="row g-3">
@@ -75,12 +73,12 @@
                                     <div class="mb-3">
                                         <label for="target_audience_type" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Тип аудитории *</label>
                                         <select class="form-select" id="target_audience_type" name="target_audience_type" required>
-                                            <option value="class" {{#if (eq event.target_audience_type "class")}}selected{{/if}}>📚 Конкретный класс</option>
-                                            <option value="multiple_classes" {{#if (eq event.target_audience_type "multiple_classes")}}selected{{/if}}>📚 Несколько классов</option>
-                                            <option value="parallel" {{#if (eq event.target_audience_type "parallel")}}selected{{/if}}>📖 Целая параллель</option>
-                                            <option value="department" {{#if (eq event.target_audience_type "department")}}selected{{/if}}>🏛️ Кафедра</option>
-                                            <option value="specific_users" {{#if (eq event.target_audience_type "specific_users")}}selected{{/if}}>👤 Конкретные пользователи</option>
-                                            <option value="all" {{#if (eq event.target_audience_type "all")}}selected{{/if}}>🌍 Все пользователи</option>
+                                            <option value="class" {{#if (eq event.target_audience_type "class")}}selected{{/if}}>Конкретный класс</option>
+                                            <option value="multiple_classes" {{#if (eq event.target_audience_type "multiple_classes")}}selected{{/if}}>Несколько классов</option>
+                                            <option value="parallel" {{#if (eq event.target_audience_type "parallel")}}selected{{/if}}>Целая параллель</option>
+                                            <option value="department" {{#if (eq event.target_audience_type "department")}}selected{{/if}}>Кафедра</option>
+                                            <option value="specific_users" {{#if (eq event.target_audience_type "specific_users")}}selected{{/if}}>Конкретные пользователи</option>
+                                            <option value="all" {{#if (eq event.target_audience_type "all")}}selected{{/if}}>Все пользователи</option>
                                         </select>
                                     </div>
                                 </div>
@@ -142,7 +140,7 @@
                     <div class="block-outline mb-3">
                         <div class="card-header bg-transparent border-bottom-0 pt-2 pb-0 px-0">
                             <h6 class="mb-0 fw-semibold" style="color: var(--dark-gray, #172033);">
-                                👤 Ответственные за мероприятие
+                                Ответственные за мероприятие
                             </h6>
                             <p class="text-muted small mt-1">Укажите одного или нескольких ответственных организаторов</p>
                         </div>
@@ -171,7 +169,7 @@
                     <!-- Блок: Запись на мероприятие -->
                     <div class="block-outline mb-3">
                         <div class="card-header bg-transparent border-bottom-0 pt-2 pb-0 px-0">
-                            <h6 class="mb-0 fw-semibold" style="color: var(--dark-gray, #172033);">📝 Запись на мероприятие</h6>
+                            <h6 class="mb-0 fw-semibold" style="color: var(--dark-gray, #172033);">Запись на мероприятие</h6>
                         </div>
                         <div class="card-body px-0 pb-0">
                             <div class="form-check mb-3">
@@ -190,7 +188,7 @@
                     <!-- Блок: Награды -->
                     <div class="block-outline border-warning mb-3">
                         <div class="card-header bg-transparent border-bottom-0 pt-2 pb-0 px-0">
-                            <h6 class="mb-0 fw-semibold" style="color: var(--dark-gray, #172033);">🏆 Награды за участие (опционально)</h6>
+                            <h6 class="mb-0 fw-semibold" style="color: var(--dark-gray, #172033);">Награды за участие (опционально)</h6>
                         </div>
                         <div class="card-body px-0 pb-0">
                             <div class="form-check mb-3">
@@ -206,8 +204,8 @@
                                         <div class="mb-3">
                                             <label for="reward_type" class="form-label fw-semibold" style="color: var(--dark-gray, #172033);">Тип события</label>
                                             <select class="form-select" id="reward_type" name="reward_type">
-                                                <option value="educational" {{#if (eq event.reward_type "educational")}}selected{{/if}}>📖 Учебное (всем участникам очки)</option>
-                                                <option value="competitive" {{#if (eq event.reward_type "competitive")}}selected{{/if}}>🏅 Соревновательное (распределение мест)</option>
+                                                <option value="educational" {{#if (eq event.reward_type "educational")}}selected{{/if}}>Учебное (всем участникам очки)</option>
+                                                <option value="competitive" {{#if (eq event.reward_type "competitive")}}selected{{/if}}>Соревновательное (распределение мест)</option>
                                             </select>
                                         </div>
                                     </div>
@@ -225,9 +223,9 @@
                                         <strong>Как будут начисляться очки:</strong><br>
                                         <span id="reward_description">
                                             {{#if (eq event.reward_type "competitive")}}
-                                                🏅 Соревновательное: участники распределят {{event.reward_places}} призовых мест (1 место — 50 очков, 2 место — 30 очков, 3 место — 20 очков, участники — 10 очков)
+                                                Соревновательное: участники распределят {{event.reward_places}} призовых мест (1 место — 50 очков, 2 место — 30 очков, 3 место — 20 очков, участники — 10 очков)
                                             {{else}}
-                                                📖 Учебное: все участники получат по 10 очков
+                                                Учебное: все участники получат по 10 очков
                                             {{/if}}
                                         </span>
                                     </p>
@@ -240,14 +238,12 @@
                     {{#ifTeacher}}
                     <div class="mb-3 form-check">
                         <input type="checkbox" class="form-check-input" id="is_admin_event" name="is_admin_event" value="1" {{#if event.is_admin_event}}checked{{/if}}>
-                        <label class="form-check-label" for="is_admin_event">
-                            🔒 Только для администраторов (не видно ученикам и родителям)
-                        </label>
+                        <label class="form-check-label" for="is_admin_event">Только для администраторов (не видно ученикам и родителям)</label>
                     </div>
                     {{/ifTeacher}}
                     
                     <div class="d-flex gap-2 mt-4">
-                        <button type="submit" class="btn btn-primary px-4 fw-semibold">✅ Сохранить изменения</button>
+                        <button type="submit" class="btn btn-primary px-4 fw-semibold">Сохранить изменения</button>
                         <a href="/" class="btn btn-secondary px-4 fw-semibold">Отмена</a>
                     </div>
                 </form>
@@ -259,22 +255,22 @@
     <div class="col-md-4">
         <div class="card shadow-sm border-0 sticky-top" style="top: 1rem;">
             <div class="card-header bg-transparent border-bottom-0 pt-3">
-                <h5 class="mb-0 fw-semibold" style="color: var(--dark-gray, #172033);">💡 Подсказка</h5>
+                <h5 class="mb-0 fw-semibold" style="color: var(--dark-gray, #172033);">Подсказка</h5>
             </div>
             <div class="card-body">
                 <p><strong>Кто увидит мероприятие?</strong></p>
                 <ul class="small">
-                    <li><strong>📚 Класс</strong> — выберите конкретный класс (например, 5А)</li>
-                    <li><strong>📚 Несколько классов</strong> — выберите несколько классов (поиск + чипсы)</li>
-                    <li><strong>📖 Параллель</strong> — выберите номер параллели (например, 5 класс)</li>
-                    <li><strong>🏛️ Кафедра</strong> — выберите кафедру (например, Математика)</li>
-                    <li><strong>👤 Пользователи</strong> — выберите конкретного пользователя</li>
-                    <li><strong>🌍 Все</strong> — увидят все пользователи системы</li>
+                    <li><strong>Класс</strong> — выберите конкретный класс (например, 5А)</li>
+                    <li><strong>Несколько классов</strong> — выберите несколько классов (поиск + чипсы)</li>
+                    <li><strong>Параллель</strong> — выберите номер параллели (например, 5 класс)</li>
+                    <li><strong>Кафедра</strong> — выберите кафедру (например, Математика)</li>
+                    <li><strong>Пользователи</strong> — выберите конкретного пользователя</li>
+                    <li><strong>Все</strong> — увидят все пользователи системы</li>
                 </ul>
                 <hr>
                 <p class="text-muted small">* — обязательные поля</p>
                 <div class="alert alert-warning border-0 small">
-                    ⚠️ После редактирования мероприятие снова отправляется на модерацию администратору.
+                    После редактирования мероприятие снова отправляется на модерацию администратору.
                 </div>
             </div>
         </div>
@@ -295,9 +291,6 @@
         const departments = JSON.parse(container.dataset.departments) || [];
         const allUsers = JSON.parse(container.dataset.users) || [];
 
-        console.log('✅ Классы загружены (edit):', allClasses.length);
-        console.log('✅ Кафедры загружены (edit):', departments.length);
-        console.log('✅ Пользователи загружены (edit):', allUsers.length);
 
         // ---------- Элементы DOM ----------
         const typeSelect = document.getElementById('target_audience_type');
@@ -626,7 +619,7 @@
                 chip.style.fontSize = '0.9rem';
                 chip.style.color = '#212529';
                 chip.innerHTML = `
-                    👤 ${user.name}
+                    ${user.name}
                     <span role="button" class="ms-1" style="cursor:pointer; color: #212529;" data-responsibleid="${user.id}">&times;</span>
                 `;
                 chip.querySelector('span[data-responsibleid]').addEventListener('click', function() {
