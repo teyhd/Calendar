@@ -5,7 +5,10 @@
   "main": "app.js",
   "scripts": {
     "test": "node --test test/**/*.test.mjs",
-    "dev": "nodemon app.js",
+    "build:css": "npx @tailwindcss/cli -i ./src/styles/app.css -o ./public/css/app.css --minify",
+    "sync:vendor": "node ./scripts/sync-vendor.mjs",
+    "build:frontend": "npm run build:css && npm run sync:vendor",
+    "dev": "npm run build:frontend && nodemon app.js",
     "start": "node app.js"
   },
   "keywords": [],
@@ -24,9 +27,10 @@
     "node-cron": "^4.5.0"
   },
   "devDependencies": {
-    "autoprefixer": "^10.5.1",
+    "@tailwindcss/cli": "^4.3.1",
+    "chart.js": "^4.4.9",
+    "fullcalendar": "^6.1.8",
     "nodemon": "^3.1.14",
-    "postcss": "^8.5.15",
     "tailwindcss": "^4.3.1"
   }
 }

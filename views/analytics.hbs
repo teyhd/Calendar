@@ -1,196 +1,26 @@
-<div class="analytics-page">
-    <div class="d-flex justify-content-between align-items-start flex-wrap mb-4">
-        <div>
-            <h1 class="mb-1" style="font-size: 1.8rem; font-weight: 700; color: var(--dark-gray, #172033);">
-                📊 Аналитика
-            </h1>
-            {{#if showAllData}}
-                <p class="text-muted mb-0">Полный доступ ко всем данным системы</p>
-            {{else}}
-                <p class="text-muted mb-0">Данные ограничены: ваши мероприятия и мероприятия вашей кафедры</p>
-            {{/if}}
-        </div>
-    </div>
+<section class="app-page-head"><div><p class="app-page-kicker">Отчётность</p><h1 class="app-page-title">Аналитика</h1><p class="app-page-summary">{{#if showAllData}}Сводные показатели по всем мероприятиям системы.{{else}}Показатели по вашим мероприятиям и кафедре.{{/if}}</p></div></section>
 
-    <!-- Фильтры -->
-    <div class="card shadow-sm mb-4 border-0">
-        <div class="card-body">
-            <div class="row g-3 align-items-end">
-                <div class="col-md-3">
-                    <label for="period" class="form-label fw-semibold small text-uppercase text-muted">Период</label>
-                    <select class="form-select form-select-sm" id="period">
-                        <option value="week">Неделя</option>
-                        <option value="month" selected>Месяц</option>
-                        <option value="quarter">Квартал</option>
-                        <option value="year">Год</option>
-                        <option value="all">Всё время</option>
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label for="eventType" class="form-label fw-semibold small text-uppercase text-muted">Тип мероприятия</label>
-                    <select class="form-select form-select-sm" id="eventType">
-                        <option value="all">Все типы</option>
-                        {{#each eventTypes}}
-                            <option value="{{id}}">{{name}}</option>
-                        {{/each}}
-                    </select>
-                </div>
-                {{#if showAllData}}
-                    <div class="col-md-3">
-                        <label for="teacherFilter" class="form-label fw-semibold small text-uppercase text-muted">Учитель</label>
-                        <select class="form-select form-select-sm" id="teacherFilter">
-                            <option value="all">Все учителя</option>
-                            {{#each teachers}}
-                                <option value="{{id}}">{{name}}</option>
-                            {{/each}}
-                        </select>
-                    </div>
-                {{/if}}
-                <div class="col-md-{{#if showAllData}}3{{else}}6{{/if}} d-flex justify-content-end">
-                    <button class="btn btn-outline-secondary btn-sm w-100 w-md-auto" id="resetFiltersBtn">
-                        <i class="bi bi-arrow-counterclockwise me-1"></i> Сбросить
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
+<section class="app-surface app-filter-bar" aria-label="Фильтры аналитики">
+    <label class="app-field"><span class="app-label">Период</span><select class="app-select" id="period"><option value="week">Неделя</option><option value="month" selected>Месяц</option><option value="quarter">Квартал</option><option value="year">Год</option><option value="all">Всё время</option></select></label>
+    <label class="app-field"><span class="app-label">Тип мероприятия</span><select class="app-select" id="eventType"><option value="all">Все типы</option>{{#each eventTypes}}<option value="{{id}}">{{name}}</option>{{/each}}</select></label>
+    {{#if showAllData}}<label class="app-field"><span class="app-label">Учитель</span><select class="app-select" id="teacherFilter"><option value="all">Все учителя</option>{{#each teachers}}<option value="{{id}}">{{name}}</option>{{/each}}</select></label>{{/if}}
+    <div class="app-field"><span class="app-label">&nbsp;</span><button class="app-btn app-btn-secondary" type="button" id="resetFiltersBtn">Сбросить</button></div>
+</section>
 
-    <!-- Общая статистика (карточки) -->
-    <div class="row g-4 mb-4" id="statsCards">
-        <div class="col-md-3 col-sm-6">
-            <div class="stat-card h-100">
-                <div class="stat-icon bg-primary">
-                    <i class="bi bi-calendar-event"></i>
-                </div>
-                <div class="stat-info">
-                    <span class="stat-label">Всего мероприятий</span>
-                    <span class="stat-number" id="totalEvents">0</span>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3 col-sm-6">
-            <div class="stat-card h-100">
-                <div class="stat-icon bg-success">
-                    <i class="bi bi-check-circle"></i>
-                </div>
-                <div class="stat-info">
-                    <span class="stat-label">Утверждено</span>
-                    <span class="stat-number" id="approvedEvents">0</span>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3 col-sm-6">
-            <div class="stat-card h-100">
-                <div class="stat-icon bg-danger">
-                    <i class="bi bi-x-circle"></i>
-                </div>
-                <div class="stat-info">
-                    <span class="stat-label">Отклонено</span>
-                    <span class="stat-number" id="rejectedEvents">0</span>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3 col-sm-6">
-            <div class="stat-card h-100">
-                <div class="stat-icon bg-info">
-                    <i class="bi bi-people"></i>
-                </div>
-                <div class="stat-info">
-                    <span class="stat-label">Участников</span>
-                    <span class="stat-number" id="totalParticipants">0</span>
-                </div>
-            </div>
-        </div>
-    </div>
+<section class="app-stat-grid" aria-label="Ключевые показатели"><div class="app-stat"><span class="app-stat-label">Всего мероприятий</span><span class="app-stat-value" id="totalEvents">0</span></div><div class="app-stat"><span class="app-stat-label">Утверждено</span><span class="app-stat-value" id="approvedEvents">0</span></div><div class="app-stat"><span class="app-stat-label">Отклонено</span><span class="app-stat-value" id="rejectedEvents">0</span></div><div class="app-stat"><span class="app-stat-label">Участников</span><span class="app-stat-value" id="totalParticipants">0</span></div></section>
 
-    <!-- Графики -->
-    <div class="row g-4">
-        <div class="col-md-6">
-            <div class="card shadow-sm h-100 border-0">
-                <div class="card-header bg-transparent border-bottom-0 pt-3">
-                    <h5 class="mb-0 fw-semibold">🏆 Топ педагогов</h5>
-                </div>
-                <div class="card-body pt-0">
-                    <canvas id="teachersChart" height="220"></canvas>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <div class="card shadow-sm h-100 border-0">
-                <div class="card-header bg-transparent border-bottom-0 pt-3">
-                    <h5 class="mb-0 fw-semibold">📚 Активность классов</h5>
-                </div>
-                <div class="card-body pt-0">
-                    <canvas id="classesChart" height="220"></canvas>
-                </div>
-            </div>
-        </div>
-    </div>
+<section class="app-chart-grid app-section-gap">
+    <article class="app-surface app-chart-panel"><h2>Активность педагогов</h2><canvas id="teachersChart" height="220"></canvas></article>
+    <article class="app-surface app-chart-panel"><h2>Активность классов</h2><canvas id="classesChart" height="220"></canvas></article>
+    <article class="app-surface app-chart-panel"><h2>Распределение по типам</h2><canvas id="typesChart" height="220"></canvas></article>
+    <article class="app-surface app-chart-panel"><h2>Динамика мероприятий</h2><canvas id="timelineChart" height="220"></canvas></article>
+</section>
 
-    <div class="row g-4 mt-2">
-        <div class="col-md-6">
-            <div class="card shadow-sm h-100 border-0">
-                <div class="card-header bg-transparent border-bottom-0 pt-3">
-                    <h5 class="mb-0 fw-semibold">🏷️ Распределение по типам</h5>
-                </div>
-                <div class="card-body pt-0">
-                    <canvas id="typesChart" height="220"></canvas>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <div class="card shadow-sm h-100 border-0">
-                <div class="card-header bg-transparent border-bottom-0 pt-3">
-                    <h5 class="mb-0 fw-semibold">📈 Динамика мероприятий</h5>
-                </div>
-                <div class="card-body pt-0">
-                    <canvas id="timelineChart" height="220"></canvas>
-                </div>
-            </div>
-        </div>
-    </div>
+<section class="app-chart-grid app-section-gap">
+    <article class="app-surface app-chart-panel"><h2>Топ учеников</h2><div id="studentsTable" class="app-table-wrap"><p class="app-help">Загрузка…</p></div></article>
+    <article class="app-surface app-chart-panel"><h2>Топ ответственных</h2><div id="responsibleTable" class="app-table-wrap"><p class="app-help">Загрузка…</p></div></article>
+    <article class="app-surface app-chart-panel"><h2>Топ организаторов</h2><div id="organizersTable" class="app-table-wrap"><p class="app-help">Загрузка…</p></div></article>
+</section>
 
-    <!-- Таблицы -->
-    <div class="row g-4 mt-2">
-        <div class="col-md-4">
-            <div class="card shadow-sm h-100 border-0">
-                <div class="card-header bg-transparent border-bottom-0 pt-3">
-                    <h5 class="mb-0 fw-semibold">🎓 Топ учеников</h5>
-                </div>
-                <div class="card-body pt-0" style="max-height: 280px; overflow-y: auto;">
-                    <div id="studentsTable">
-                        <p class="text-muted text-center py-3">Загрузка...</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card shadow-sm h-100 border-0">
-                <div class="card-header bg-transparent border-bottom-0 pt-3">
-                    <h5 class="mb-0 fw-semibold">👤 Топ ответственных</h5>
-                </div>
-                <div class="card-body pt-0" style="max-height: 280px; overflow-y: auto;">
-                    <div id="responsibleTable">
-                        <p class="text-muted text-center py-3">Загрузка...</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card shadow-sm h-100 border-0">
-                <div class="card-header bg-transparent border-bottom-0 pt-3">
-                    <h5 class="mb-0 fw-semibold">🏅 Топ организаторов</h5>
-                </div>
-                <div class="card-body pt-0" style="max-height: 280px; overflow-y: auto;">
-                    <div id="organizersTable">
-                        <p class="text-muted text-center py-3">Загрузка...</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Скрипты -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="/vendor/chart.js/chart.umd.js"></script>
 <script src="/js/analytics.js"></script>

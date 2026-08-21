@@ -1,597 +1,186 @@
-// ================================================================
-// calendar.js – Школьный календарь мероприятий
-// ================================================================
+(() => {
+    const STATUS = {
+        WAITING_ADMIN: { text: 'На модерации', className: 'waiting', color: '#f79009' },
+        APPROVED: { text: 'Опубликовано', className: 'approved', color: '#12b76a' },
+        REJECTED: { text: 'Отклонено', className: 'rejected', color: '#d92d20' },
+        CANCELED: { text: 'Отменено', className: 'canceled', color: '#d92d20' },
+        COMPLETED: { text: 'Завершено', className: 'completed', color: '#155eef' },
+        DRAFT: { text: 'Черновик', className: 'draft', color: '#98a2b3' }
+    };
 
-document.addEventListener('DOMContentLoaded', function() {
-    const calendarEl = document.getElementById('calendar');
-    if (!calendarEl) return;
+    function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>'"]/g, (symbol) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[symbol]));
+    }
 
-    window.currentUserId = document.querySelector('meta[name="user-id"]')?.content || 0;
-    window.currentUserRole = document.querySelector('meta[name="user-role"]')?.content || '';
+    function formatDate(value) {
+        if (!value) return 'Не указано';
+        const date = new Date(value);
+        return Number.isNaN(date.valueOf()) ? 'Не указано' : date.toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short' });
+    }
 
-    const calendar = new FullCalendar.Calendar(calendarEl, {
-        initialView: 'dayGridMonth',
-        locale: 'ru',
-        headerToolbar: {
-            left: 'prev,next today',
-            center: 'title',
-            right: 'dayGridMonth,timeGridWeek,listWeek'
-        },
-        buttonText: {
-            today: 'Сегодня',
-            month: 'Месяц',
-            week: 'Неделя',
-            list: 'Список'
-        },
-        buttonHints: {
-            prev: 'Предыдущий',
-            next: 'Следующий',
-            today: 'Сегодня'
-        },
-        events: function(fetchInfo, successCallback, failureCallback) {
-            const search = document.getElementById('searchInput')?.value || '';
-            const status = document.getElementById('filterStatus')?.value || 'all';
-            const type = document.getElementById('filterType')?.value || 'all';
+    function audienceText(props) {
+        const labels = { all: 'Все пользователи', class: 'Класс', parallel: 'Параллель', department: 'Кафедра', specific_users: 'Выбранные пользователи', multiple_classes: 'Несколько классов' };
+        return labels[props.target_audience_type] || 'Не указана';
+    }
 
-            const params = new URLSearchParams({ search, status, type });
-            const url = `/api/events?${params.toString()}`;
+    function eventLevel(value) {
+        const labels = { school: 'Школьный', city: 'Городской', regional: 'Региональный', national: 'Всероссийский', international: 'Международный' };
+        return labels[value] || 'Не указан';
+    }
 
-            fetch(url)
-                .then(response => {
-                    if (!response.ok) throw new Error('Ошибка загрузки');
-                    return response.json();
-                })
-                .then(events => {
-                    const formatted = events.map(event => ({
-                        id: event.id,
-                        title: event.title,
-                        start: event.start_datetime,
-                        end: event.end_datetime,
-                        description: event.description || '',
-                        location: event.location || '',
-                        status: event.status,
-                        created_by: event.created_by,
-                        extendedProps: {
-                            id: event.id,
-                            description: event.description,
-                            location: event.location,
-                            status: event.status,
-                            creator: event.creator_name,
-                            type: event.type_name,
-                            created_by: event.created_by,
-                            start_datetime: event.start_datetime,
-                            end_datetime: event.end_datetime,
-                            level: event.level,
-                            target_audience_type: event.target_audience_type,
-                            target_audience_id: event.target_audience_id,
-                            is_admin_event: event.is_admin_event,
-                            is_registration_enabled: event.is_registration_enabled,
-                            created_at: event.created_at,
-                            updated_at: event.updated_at,
-                            responsible_ids: event.responsible_ids
-                        }
-                    }));
-                    successCallback(formatted);
-                    loadStats();
-                })
-                .catch(error => {
-                    console.error('Ошибка загрузки событий:', error);
-                    failureCallback(error);
+    window.loadStats = function loadStats() {
+        fetch('/api/events')
+            .then((response) => response.ok ? response.json() : Promise.reject(new Error('Не удалось загрузить статистику')))
+            .then((events) => {
+                const values = {
+                    totalEvents: events.length,
+                    approvedEvents: events.filter((event) => event.status === 'APPROVED').length,
+                    pendingEvents: events.filter((event) => event.status === 'WAITING_ADMIN').length,
+                    myParticipations: events.filter((event) => Number(event.created_by) === Number(window.currentUserId)).length
+                };
+                Object.entries(values).forEach(([id, value]) => {
+                    const element = document.getElementById(id);
+                    if (element) element.textContent = value;
                 });
-        },
-        eventClick: function(info) {
-            const event = info.event;
-            const eventId = event.id;
-            const userId = window.currentUserId;
-            const userRole = parseInt(window.currentUserRole);
-            
-            fetch(`/api/events/${eventId}`)
-                .then(response => {
-                    if (!response.ok) throw new Error('Мероприятие не найдено');
-                    return response.json();
-                })
-                .then(eventData => {
-                    const isOwner = parseInt(eventData.created_by) === parseInt(userId);
-                    const isAdmin = userRole === 5;
-                    const canEdit = isAdmin || (isOwner && eventData.status === 'WAITING_ADMIN');
+            })
+            .catch((error) => console.error('Не удалось загрузить статистику:', error));
+    };
 
-                    const props = {
-                        id: eventData.id,
-                        description: eventData.description || '',
-                        location: eventData.location || '',
-                        status: eventData.status,
-                        creator: eventData.creator_name || 'Неизвестен',
-                        type: eventData.type_name || 'Не указан',
-                        created_by: eventData.created_by,
-                        start_datetime: eventData.start_datetime,
-                        end_datetime: eventData.end_datetime,
-                        level: eventData.level,
-                        target_audience_type: eventData.target_audience_type,
-                        target_audience_id: eventData.target_audience_id,
-                        is_admin_event: eventData.is_admin_event,
-                        is_registration_enabled: eventData.is_registration_enabled,
-                        created_at: eventData.created_at,
-                        updated_at: eventData.updated_at,
-                        responsible_names: eventData.responsible_names || []
-                    };
+    window.renderEventModal = function renderEventModal(event, props, canEdit, isAdmin, isOwner) {
+        const body = document.getElementById('eventModalBody');
+        const footer = document.getElementById('eventModalFooter');
+        const title = document.getElementById('eventModalLabel');
+        if (!body || !footer || !title) return;
 
-                    renderEventModal(event, props, canEdit, isAdmin, isOwner);
-                    const modal = new bootstrap.Modal(document.getElementById('eventModal'));
-                    modal.show();
+        const status = STATUS[props.status] || STATUS.DRAFT;
+        const registrationEnabled = props.is_registration_enabled === 1 || props.is_registration_enabled === true;
+        const responsible = Array.isArray(props.responsible_names) ? props.responsible_names.join(', ') : props.responsible_names;
+        title.textContent = String(event.title || 'Мероприятие').slice(0, 90);
+
+        body.innerHTML = `
+            <div class="app-detail-layout">
+                <section>
+                    <div class="app-detail-statuses"><span class="app-status app-status-${status.className}">${status.text}</span><span class="app-type">${escapeHtml(props.type_name || props.type || 'Без типа')}</span>${props.is_admin_event ? '<span class="app-type">Административное</span>' : ''}${registrationEnabled ? '<span class="app-type">Запись открыта</span>' : ''}</div>
+                    <dl class="app-detail-list">
+                        <div><dt>Дата и время</dt><dd>${formatDate(props.start_datetime)} — ${formatDate(props.end_datetime)}</dd></div>
+                        ${props.location ? `<div><dt>Место</dt><dd>${escapeHtml(props.location)}</dd></div>` : ''}
+                        ${props.description ? `<div><dt>Описание</dt><dd>${escapeHtml(props.description)}</dd></div>` : ''}
+                        <div><dt>Тип</dt><dd>${escapeHtml(props.type_name || props.type || 'Не указан')}</dd></div>
+                        <div><dt>Уровень</dt><dd>${eventLevel(props.level)}</dd></div>
+                        <div><dt>Организатор</dt><dd>${escapeHtml(props.creator_name || props.creator || 'Неизвестен')}</dd></div>
+                        ${responsible ? `<div><dt>Ответственные</dt><dd>${escapeHtml(responsible)}</dd></div>` : ''}
+                        <div><dt>Аудитория</dt><dd>${audienceText(props)}</dd></div>
+                    </dl>
+                    ${props.created_at ? `<p class="app-detail-note">Создано ${formatDate(props.created_at)}${props.updated_at && props.updated_at !== props.created_at ? ` · обновлено ${formatDate(props.updated_at)}` : ''}</p>` : ''}
+                </section>
+                <aside class="app-detail-aside" id="eventSideInfo">
+                    <section class="app-detail-panel"><h3>Статус</h3><span class="app-status app-status-${status.className}">${status.text}</span>${props.status === 'WAITING_ADMIN' ? '<p>Мероприятие ожидает решения администратора.</p>' : ''}</section>
+                    ${isOwner || isAdmin ? '<section class="app-detail-panel" id="participantsContainer"><h3>Участники <span id="participantsCount">0</span></h3><div id="participantsList" class="app-detail-rows"><span class="app-help">Загрузка…</span></div></section>' : ''}
+                    ${isAdmin ? '<section class="app-detail-panel" id="approvalsContainer"><h3>Согласование</h3><div id="approvalsList" class="app-detail-rows"><span class="app-help">Загрузка…</span></div></section>' : ''}
+                </aside>
+            </div>`;
+
+        if (isOwner || isAdmin) loadParticipants(event.id);
+        if (isAdmin) loadApprovals(event.id);
+
+        let actions = '<span></span><button type="button" class="app-btn app-btn-secondary" data-dialog-close>Закрыть</button>';
+        if (canEdit) actions += `<a class="app-btn app-btn-primary" href="/events/edit/${encodeURIComponent(event.id)}">Редактировать</a>`;
+        if ((isOwner || isAdmin) && props.status === 'APPROVED') actions += `<button type="button" class="app-btn app-btn-primary" onclick="completeEvent(${Number(event.id)})">Завершить</button>`;
+        if (isOwner && props.status === 'WAITING_ADMIN') actions += `<button type="button" class="app-btn app-btn-danger" onclick="openReasonModal(${Number(event.id)}, 'delete')">Удалить</button>`;
+        if (isAdmin && (props.status === 'APPROVED' || props.status === 'WAITING_ADMIN')) actions += `<button type="button" class="app-btn app-btn-danger" onclick="openReasonModal(${Number(event.id)}, 'cancel')">Отменить</button>`;
+        if (isAdmin && props.status === 'WAITING_ADMIN') actions += `<a class="app-btn app-btn-warning" href="/events/moderation">К модерации</a>`;
+        footer.innerHTML = actions;
+
+        const role = Number(window.currentUserRole || 0);
+        if ((role === 1 || role === 6) && props.status === 'APPROVED' && registrationEnabled) {
+            fetch(`/api/events/${encodeURIComponent(event.id)}/is-registered`)
+                .then((response) => response.ok ? response.json() : { isRegistered: false })
+                .then((result) => {
+                    footer.insertAdjacentHTML('beforeend', result.isRegistered
+                        ? `<button type="button" class="app-btn app-btn-danger" onclick="openReasonModal(${Number(event.id)}, 'cancel_registration')">Отменить запись</button>`
+                        : `<button type="button" class="app-btn app-btn-primary" onclick="registerForEvent(${Number(event.id)})">Записаться</button>`);
                 })
-                .catch(error => {
-                    console.error('Ошибка загрузки мероприятия:', error);
-                    alert('Не удалось загрузить мероприятие');
-                });
-        },
-        eventDidMount: function(info) {
-            const status = info.event.extendedProps.status;
-            const colors = {
-                'WAITING_ADMIN': '#ffc107',
-                'APPROVED': '#28a745',
-                'REJECTED': '#dc3545',
-                'CANCELED': '#6c757d',
-                'COMPLETED': '#17a2b8',
-                'DRAFT': '#adb5bd'
-            };
-            const color = colors[status] || '#6c757d';
-            info.el.style.borderLeft = `4px solid ${color}`;
-            info.el.style.borderRadius = '4px';
-            info.el.style.boxShadow = '0 1px 3px rgba(0,0,0,0.08)';
+                .catch(() => footer.insertAdjacentHTML('beforeend', `<button type="button" class="app-btn app-btn-primary" onclick="registerForEvent(${Number(event.id)})">Записаться</button>`));
         }
-    });
-
-    calendar.render();
-    window.calendar = calendar;
-
-    const searchInput = document.getElementById('searchInput');
-    const filterStatus = document.getElementById('filterStatus');
-    const filterType = document.getElementById('filterType');
-    const resetBtn = document.getElementById('resetFiltersBtn');
-
-    if (searchInput) {
-        searchInput.addEventListener('input', function() {
-            window.calendar.refetchEvents();
-        });
-    }
-    if (filterStatus) {
-        filterStatus.addEventListener('change', function() {
-            window.calendar.refetchEvents();
-        });
-    }
-    if (filterType) {
-        filterType.addEventListener('change', function() {
-            window.calendar.refetchEvents();
-        });
-    }
-    if (resetBtn) {
-        resetBtn.addEventListener('click', function() {
-            if (searchInput) searchInput.value = '';
-            if (filterStatus) filterStatus.value = 'all';
-            if (filterType) filterType.value = 'all';
-            window.calendar.refetchEvents();
-        });
-    }
-});
-
-// ===== ЗАГРУЗКА СТАТИСТИКИ =====
-function loadStats() {
-    fetch('/api/events')
-        .then(res => res.json())
-        .then(events => {
-            const total = events.length;
-            const approved = events.filter(e => e.status === 'APPROVED').length;
-            const pending = events.filter(e => e.status === 'WAITING_ADMIN').length;
-            const myParticipations = events.filter(e => e.created_by == window.currentUserId).length;
-
-            const elTotal = document.getElementById('totalEvents');
-            const elApproved = document.getElementById('approvedEvents');
-            const elPending = document.getElementById('pendingEvents');
-            const elMy = document.getElementById('myParticipations');
-
-            if (elTotal) elTotal.textContent = total;
-            if (elApproved) elApproved.textContent = approved;
-            if (elPending) elPending.textContent = pending;
-            if (elMy) elMy.textContent = myParticipations || '?';
-        })
-        .catch(err => console.error('Ошибка загрузки статистики:', err));
-}
-
-// ================================================================
-// === ФУНКЦИЯ ОТОБРАЖЕНИЯ МОДАЛЬНОГО ОКНА ===
-// ================================================================
-function renderEventModal(event, props, canEdit, isAdmin, isOwner) {
-    const modalBody = document.getElementById('eventModalBody');
-    const modalFooter = document.getElementById('eventModalFooter');
-    const modalTitle = document.getElementById('eventModalLabel');
-    
-    if (!modalBody || !modalFooter || !modalTitle) {
-        console.error('Элементы модального окна не найдены в DOM');
-        return;
-    }
-
-    function truncateText(text, maxLength = 300) {
-        if (!text) return '';
-        if (text.length <= maxLength) return text;
-        return text.slice(0, maxLength) + '...';
-    }
-
-    const statusColors = {
-        'WAITING_ADMIN': 'warning',
-        'APPROVED': 'success',
-        'REJECTED': 'danger',
-        'CANCELED': 'secondary',
-        'COMPLETED': 'info',
-        'DRAFT': 'secondary'
     };
-    const statusTexts = {
-        'WAITING_ADMIN': 'Ожидает админа',
-        'APPROVED': 'Опубликовано',
-        'REJECTED': 'Отклонено',
-        'CANCELED': 'Отменено',
-        'COMPLETED': 'Завершено',
-        'DRAFT': 'Черновик'
-    };
-    const statusColor = statusColors[props.status] || 'secondary';
-    const statusText = statusTexts[props.status] || props.status;
 
-    modalTitle.textContent = `📌 ${truncateText(event.title, 80)}`;
-
-    const isRegistrationEnabled = props.is_registration_enabled === 1 || props.is_registration_enabled === true;
-    const showParticipants = isOwner || isAdmin;
-    const userRole = parseInt(window.currentUserRole);
-    const showApprovals = userRole === 5;
-
-    // Ответственные
-    let responsibleHtml = '';
-    if (props.responsible_names && props.responsible_names.length > 0) {
-        responsibleHtml = `
-            <div class="mb-2" style="display: flex; align-items: baseline; gap: 0.5rem;">
-                <span style="font-weight: 600; color: #172033; min-width: 110px;">👥 Ответственные:</span>
-                <span>${props.responsible_names.join(', ')}</span>
-            </div>
-        `;
-    }
-
-    modalBody.innerHTML = `
-        <div class="row">
-            <div class="col-md-8">
-                <div class="mb-3 d-flex flex-wrap gap-1">
-                    <span class="badge bg-${statusColor}" style="font-size: 0.9rem; padding: 0.4rem 0.9rem; border-radius: 1rem;">
-                        ${statusText}
-                    </span>
-                    ${props.is_admin_event ? '<span class="badge bg-danger" style="font-size: 0.9rem; padding: 0.4rem 0.9rem; border-radius: 1rem;">🔒 Только для администраторов</span>' : ''}
-                    ${isRegistrationEnabled ? '<span class="badge bg-info" style="font-size: 0.9rem; padding: 0.4rem 0.9rem; border-radius: 1rem;">📝 Запись открыта</span>' : ''}
-                </div>
-
-                <div class="mb-2" style="display: flex; align-items: baseline; gap: 0.5rem;">
-                    <span style="font-weight: 600; color: #172033; min-width: 110px;">📅 Дата и время:</span>
-                    <span>${new Date(props.start_datetime).toLocaleString('ru-RU')} — ${new Date(props.end_datetime).toLocaleString('ru-RU')}</span>
-                </div>
-
-                ${props.location ? `
-                    <div class="mb-2" style="display: flex; align-items: baseline; gap: 0.5rem;">
-                        <span style="font-weight: 600; color: #172033; min-width: 110px;">📍 Место:</span>
-                        <span title="${props.location.replace(/"/g, '&quot;')}">${truncateText(props.location, 80)}</span>
-                    </div>
-                ` : ''}
-
-                ${props.description ? `
-                    <div class="mb-2" style="display: flex; align-items: flex-start; gap: 0.5rem;">
-                        <span style="font-weight: 600; color: #172033; min-width: 110px;">📝 Описание:</span>
-                        <span title="${props.description.replace(/"/g, '&quot;')}">${truncateText(props.description, 300)}</span>
-                    </div>
-                ` : ''}
-
-                <div class="row mb-2">
-                    <div class="col-6">
-                        <span style="font-weight: 600; color: #172033;">📂 Тип:</span>
-                        <span>${props.type || 'Не указан'}</span>
-                    </div>
-                    <div class="col-6">
-                        <span style="font-weight: 600; color: #172033;">🏷️ Уровень:</span>
-                        <span>${props.level === 'school' ? '🏫 Школьное' :
-                                props.level === 'city' ? '🏙️ Городское' :
-                                props.level === 'regional' ? '🌍 Региональное' :
-                                props.level === 'national' ? '🇷🇺 Всероссийское' :
-                                props.level === 'international' ? '🌐 Международное' : 'Не указан'}</span>
-                    </div>
-                </div>
-
-                <div class="mb-2" style="display: flex; align-items: baseline; gap: 0.5rem;">
-                    <span style="font-weight: 600; color: #172033; min-width: 110px;">👤 Организатор:</span>
-                    <span>${props.creator || 'Неизвестен'}</span>
-                </div>
-
-                ${responsibleHtml}
-
-                <div class="mb-2" style="display: flex; align-items: baseline; gap: 0.5rem;">
-                    <span style="font-weight: 600; color: #172033; min-width: 110px;">🎯 Аудитория:</span>
-                    <span>${props.target_audience_type === 'all' ? 'Все пользователи' :
-                            props.target_audience_type === 'class' ? `Класс (ID: ${props.target_audience_id})` :
-                            props.target_audience_type === 'parallel' ? `Параллель (ID: ${props.target_audience_id})` :
-                            props.target_audience_type === 'department' ? `Кафедра (ID: ${props.target_audience_id})` :
-                            props.target_audience_type === 'specific_users' ? `Конкретные пользователи (ID: ${props.target_audience_id})` :
-                            props.target_audience_type === 'multiple_classes' ? `Несколько классов (ID: ${props.target_audience_id})` :
-                            'Не указана'}</span>
-                </div>
-
-                ${props.created_at ? `
-                    <div class="text-muted small mt-3" style="border-top: 1px solid #e9ecef; padding-top: 0.75rem;">
-                        Создано: ${new Date(props.created_at).toLocaleString('ru-RU')}
-                        ${props.updated_at && props.updated_at !== props.created_at ? `(обновлено: ${new Date(props.updated_at).toLocaleString('ru-RU')})` : ''}
-                    </div>
-                ` : ''}
-            </div>
-
-            <div class="col-md-4">
-                ${showParticipants ? `
-                    <div id="participantsContainer" style="display: none;">
-                        <div class="card bg-light border-0 shadow-sm">
-                            <div class="card-body">
-                                <h6 class="card-title fw-semibold mb-2" style="color: #172033;">
-                                    👥 Участники (<span id="participantsCount">0</span>)
-                                </h6>
-                                <div id="participantsList" class="small" style="max-height: 250px; overflow-y: auto;">
-                                    <span class="text-muted">Загрузка...</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                ` : `
-                    <div class="card bg-light border-0 shadow-sm">
-                        <div class="card-body">
-                            <h6 class="card-title fw-semibold mb-2" style="color: #172033;">📊 Статус</h6>
-                            <span class="badge bg-${statusColor} fs-6" style="font-size: 1rem; padding: 0.4rem 1rem; border-radius: 1rem;">
-                                ${statusText}
-                            </span>
-                            ${props.status === 'WAITING_ADMIN' ? `
-                                <div class="alert alert-warning border-0 small mt-2 mb-0">
-                                    ⏳ Мероприятие ожидает утверждения.
-                                </div>
-                            ` : ''}
-                            ${props.status === 'REJECTED' ? `
-                                <div class="alert alert-danger border-0 small mt-2 mb-0">
-                                    ❌ Мероприятие отклонено.
-                                </div>
-                            ` : ''}
-                            ${props.status === 'COMPLETED' ? `
-                                <div class="alert alert-info border-0 small mt-2 mb-0">
-                                    ✔️ Мероприятие завершено.
-                                </div>
-                            ` : ''}
-                            ${props.status === 'CANCELED' ? `
-                                <div class="alert alert-secondary border-0 small mt-2 mb-0">
-                                    🚫 Мероприятие отменено.
-                                </div>
-                            ` : ''}
-                            ${props.status === 'APPROVED' ? `
-                                <div class="alert alert-success border-0 small mt-2 mb-0">
-                                    ✅ Мероприятие опубликовано.
-                                </div>
-                            ` : ''}
-                        </div>
-                    </div>
-                `}
-
-                ${showApprovals ? `
-                    <div id="approvalsContainer" class="mt-3" style="display: none;">
-                        <div class="card bg-light border-0 shadow-sm">
-                            <div class="card-body">
-                                <h6 class="card-title fw-semibold mb-2" style="color: #172033;">
-                                    📋 Прогресс утверждения
-                                </h6>
-                                <div id="approvalsList" class="small" style="max-height: 200px; overflow-y: auto;">
-                                    <span class="text-muted">Загрузка...</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                ` : ''}
-            </div>
-        </div>
-    `;
-
-    // Загрузка участников
-    if (showParticipants) {
-        const container = document.getElementById('participantsContainer');
+    function loadParticipants(eventId) {
         const list = document.getElementById('participantsList');
         const count = document.getElementById('participantsCount');
-
-        if (container && list && count) {
-            container.style.display = 'block';
-
-            fetch(`/api/events/${event.id}/participants`)
-                .then(res => res.json())
-                .then(participants => {
-                    count.textContent = participants.length;
-                    if (participants.length === 0) {
-                        list.innerHTML = '<span class="text-muted">Нет участников</span>';
-                    } else {
-                        list.innerHTML = participants.map(p => 
-                            `<div class="py-1 border-bottom border-light">👤 ${p.user_name} ${p.class_name ? '(' + p.class_name + ')' : ''}</div>`
-                        ).join('');
-                    }
-                })
-                .catch(err => {
-                    console.error('Ошибка загрузки участников:', err);
-                    list.innerHTML = '<span class="text-danger">Не удалось загрузить участников</span>';
-                });
-        }
-    }
-
-    // Загрузка прогресса утверждений (для админов и директоров)
-    if (showApprovals) {
-        const container = document.getElementById('approvalsContainer');
-        const list = document.getElementById('approvalsList');
-        if (container && list) {
-            container.style.display = 'block';
-            fetch(`/api/events/${event.id}/approvals`)
-                .then(res => res.json())
-                .then(approvals => {
-                    if (approvals.length === 0) {
-                        list.innerHTML = '<span class="text-muted">Нет данных об утверждениях</span>';
-                        return;
-                    }
-                    let html = '<ul class="list-unstyled mb-0">';
-                    approvals.forEach(a => {
-                        const statusIcon = a.status === 'approved' ? '✅' : 
-                                           a.status === 'rejected' ? '❌' : '⏳';
-                        const roleLabel = 'Админ';
-                        html += `
-                            <li class="py-1 border-bottom border-light d-flex justify-content-between align-items-center">
-                                <span>
-                                    ${statusIcon} <strong>${a.user_name}</strong>
-                                    <span class="text-muted" style="font-size:0.75rem;">(${roleLabel})</span>
-                                </span>
-                                ${a.comment ? `<span class="text-muted" style="font-size:0.7rem;">${a.comment}</span>` : ''}
-                            </li>
-                        `;
-                    });
-                    html += '</ul>';
-                    list.innerHTML = html;
-                })
-                .catch(err => {
-                    console.error('Ошибка загрузки статусов утверждений:', err);
-                    list.innerHTML = '<span class="text-danger">Не удалось загрузить данные</span>';
-                });
-        }
-    }
-
-    // Кнопки в футере
-    let footerButtons = '';
-
-    if (canEdit) {
-        footerButtons += `
-            <a href="/events/edit/${event.id}" class="btn btn-primary">
-                ✏️ Редактировать
-            </a>
-        `;
-    }
-
-    if ((isOwner || isAdmin) && props.status === 'APPROVED') {
-        footerButtons += `
-            <button type="button" class="btn btn-success" onclick="completeEvent(${event.id})">
-                ✅ Завершить мероприятие
-            </button>
-        `;
-    }
-
-    if (isOwner && props.status === 'WAITING_ADMIN') {
-        footerButtons += `
-            <button type="button" class="btn btn-danger" onclick="openReasonModal(${event.id}, 'delete')">
-                🗑️ Удалить
-            </button>
-        `;
-    }
-
-    // Кнопка "Отменить" — только для администратора.
-    if (isAdmin && (props.status === 'APPROVED' || props.status === 'WAITING_ADMIN')) {
-        footerButtons += `
-            <button type="button" class="btn btn-danger" onclick="openReasonModal(${event.id}, 'cancel')">
-                ❌ Отменить мероприятие
-            </button>
-        `;
-    }
-
-    if (isAdmin && props.status === 'WAITING_ADMIN') {
-        footerButtons += `
-            <a href="/events/moderation" class="btn btn-warning">
-                🔍 Модерация
-            </a>
-        `;
-    }
-
-    if ((userRole === 1 || userRole === 6) && props.status === 'APPROVED' && isRegistrationEnabled) {
-        fetch(`/api/events/${event.id}/is-registered`)
-            .then(res => res.json())
-            .then(data => {
-                let buttons = footerButtons;
-                if (data.isRegistered) {
-                    buttons += `
-                        <button type="button" class="btn btn-danger" onclick="openReasonModal(${event.id}, 'cancel_registration')">
-                            ❌ Отменить запись
-                        </button>
-                    `;
-                } else {
-                    buttons += `
-                        <button type="button" class="btn btn-success" onclick="registerForEvent(${event.id})">
-                            📝 Записаться
-                        </button>
-                    `;
-                }
-                modalFooter.innerHTML = buttons;
+        fetch(`/api/events/${encodeURIComponent(eventId)}/participants`)
+            .then((response) => response.ok ? response.json() : Promise.reject(new Error('Не удалось загрузить участников')))
+            .then((participants) => {
+                if (count) count.textContent = participants.length;
+                if (list) list.innerHTML = participants.length ? participants.map((participant) => `<div>${escapeHtml(participant.user_name)}${participant.class_name ? ` · ${escapeHtml(participant.class_name)}` : ''}</div>`).join('') : '<span class="app-help">Пока нет участников</span>';
             })
-            .catch(() => {
-                let buttons = footerButtons;
-                buttons += `
-                    <button type="button" class="btn btn-success" onclick="registerForEvent(${event.id})">
-                        📝 Записаться
-                    </button>
-                `;
-                modalFooter.innerHTML = buttons;
-            });
-    } else {
-        modalFooter.innerHTML = footerButtons;
+            .catch(() => { if (list) list.innerHTML = '<span class="app-help">Не удалось загрузить список</span>'; });
     }
-}
 
-window.renderEventModal = renderEventModal;
+    function loadApprovals(eventId) {
+        const list = document.getElementById('approvalsList');
+        fetch(`/api/events/${encodeURIComponent(eventId)}/approvals`)
+            .then((response) => response.ok ? response.json() : Promise.reject(new Error('Не удалось загрузить согласования')))
+            .then((approvals) => {
+                if (list) list.innerHTML = approvals.length ? approvals.map((approval) => `<div><strong>${escapeHtml(approval.user_name)}</strong><br><span class="app-help">${approval.status === 'approved' ? 'Утверждено' : approval.status === 'rejected' ? 'Отклонено' : 'Ожидает решения'}${approval.comment ? ` · ${escapeHtml(approval.comment)}` : ''}</span></div>`).join('') : '<span class="app-help">Нет данных по согласованию</span>';
+            })
+            .catch(() => { if (list) list.innerHTML = '<span class="app-help">Не удалось загрузить данные</span>'; });
+    }
 
-// ================================================================
-// === ФУНКЦИЯ ЗАПИСИ НА МЕРОПРИЯТИЕ ===
-// ================================================================
-function registerForEvent(eventId) {
-    if (!confirm('Вы действительно хотите записаться на это мероприятие?')) return;
+    window.registerForEvent = function registerForEvent(eventId) {
+        if (!window.confirm('Записаться на это мероприятие?')) return;
+        fetch(`/api/events/${encodeURIComponent(eventId)}/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+            .then((response) => response.json())
+            .then((data) => {
+                if (!data.success) throw new Error(data.error || 'Не удалось записаться');
+                window.appUI?.closeDialog('eventModal'); window.calendar?.refetchEvents(); window.loadStats();
+            })
+            .catch((error) => window.alert(error.message || 'Ошибка сервера'));
+    };
 
-    fetch(`/api/events/${eventId}/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            alert('✅ ' + data.message);
-            const modal = bootstrap.Modal.getInstance(document.getElementById('eventModal'));
-            if (modal) modal.hide();
-            if (window.calendar) {
-                window.calendar.refetchEvents();
-                loadStats();
+    window.completeEvent = function completeEvent(eventId) {
+        if (!window.confirm('Подтвердить завершение мероприятия? Оно будет перенесено в архив.')) return;
+        fetch(`/api/events/${encodeURIComponent(eventId)}/complete`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+            .then((response) => response.json())
+            .then((data) => {
+                if (!data.success) throw new Error(data.error || 'Не удалось завершить мероприятие');
+                window.appUI?.closeDialog('eventModal'); window.calendar?.refetchEvents(); window.loadStats();
+            })
+            .catch((error) => window.alert(error.message || 'Ошибка сервера'));
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const calendarElement = document.getElementById('calendar');
+        if (!calendarElement || !window.FullCalendar) return;
+
+        window.currentUserId = document.querySelector('meta[name="user-id"]')?.content || 0;
+        window.currentUserRole = document.querySelector('meta[name="user-role"]')?.content || 0;
+        const calendar = new FullCalendar.Calendar(calendarElement, {
+            initialView: 'dayGridMonth', locale: 'ru', height: 'auto',
+            headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,listWeek' },
+            buttonText: { prev: 'Назад', next: 'Вперёд', today: 'Сегодня', month: 'Месяц', week: 'Неделя', list: 'Список' },
+            events(fetchInfo, successCallback, failureCallback) {
+                const params = new URLSearchParams({ search: document.getElementById('searchInput')?.value || '', status: document.getElementById('filterStatus')?.value || 'all', type: document.getElementById('filterType')?.value || 'all' });
+                fetch(`/api/events?${params}`)
+                    .then((response) => response.ok ? response.json() : Promise.reject(new Error('Не удалось загрузить календарь')))
+                    .then((events) => {
+                        successCallback(events.map((item) => ({ id: item.id, title: item.title, start: item.start_datetime, end: item.end_datetime, extendedProps: { status: item.status } })));
+                        window.loadStats();
+                    })
+                    .catch((error) => { console.error('Не удалось загрузить события:', error); failureCallback(error); });
+            },
+            eventClick(info) { window.openEventModal(info.event.id, info.el); },
+            eventDidMount(info) {
+                const status = STATUS[info.event.extendedProps.status] || STATUS.DRAFT;
+                info.el.style.borderLeft = `3px solid ${status.color}`;
             }
-        } else {
-            alert('❌ ' + (data.error || 'Ошибка при записи'));
-        }
-    })
-    .catch(error => {
-        console.error('Ошибка записи:', error);
-        alert('❌ Ошибка сервера при записи');
-    });
-}
+        });
+        calendar.render();
+        window.calendar = calendar;
 
-// ===== ЗАВЕРШЕНИЕ МЕРОПРИЯТИЯ =====
-function completeEvent(eventId) {
-    if (!confirm('Вы уверены, что мероприятие завершено? Оно переместится в архив.')) return;
-
-    fetch(`/api/events/${eventId}/complete`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            alert('✅ ' + data.message);
-            const modal = bootstrap.Modal.getInstance(document.getElementById('eventModal'));
-            if (modal) modal.hide();
-            if (window.calendar) {
-                window.calendar.refetchEvents();
-                loadStats();
-            }
-        } else {
-            alert('❌ ' + (data.error || 'Ошибка завершения'));
-        }
-    })
-    .catch(error => {
-        console.error('Ошибка завершения:', error);
-        alert('❌ Ошибка сервера');
+        ['searchInput', 'filterStatus', 'filterType'].forEach((id) => document.getElementById(id)?.addEventListener(id === 'searchInput' ? 'input' : 'change', () => calendar.refetchEvents()));
+        document.getElementById('resetFiltersBtn')?.addEventListener('click', () => {
+            const search = document.getElementById('searchInput'); const status = document.getElementById('filterStatus'); const type = document.getElementById('filterType');
+            if (search) search.value = ''; if (status) status.value = 'all'; if (type) type.value = 'all'; calendar.refetchEvents();
+        });
     });
-}
+})();

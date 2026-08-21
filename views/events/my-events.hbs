@@ -1,72 +1,22 @@
-<h1 class="mb-4" style="font-size: 1.8rem; font-weight: 700; color: var(--dark-gray, #172033);">
-    📋 Мои мероприятия
-</h1>
+<section class="app-page-head">
+    <div><p class="app-page-kicker">Личный раздел</p><h1 class="app-page-title">Мои мероприятия</h1><p class="app-page-summary">Созданные вами события и их текущие статусы.</p></div>
+    {{#if user.permissions.create_event}}<a class="app-btn app-btn-primary" href="/events/create">Создать мероприятие</a>{{/if}}
+</section>
 
 {{#if events.length}}
-    <div class="row g-4">
-        {{#each events}}
-            <div class="col-md-6 col-lg-4">
-                <div class="card card-outline h-100" 
-                     data-event-id="{{id}}" 
-                     style="cursor: pointer;"
-                     onmouseover="this.style.transform='translateY(-3px)'"
-                     onmouseout="this.style.transform=''">
-                    <div class="card-header bg-transparent border-bottom-0 d-flex justify-content-between align-items-center pt-3 pb-0">
-                        <span class="badge" style="background-color: {{statusColor status}}; color: #fff; font-weight: 500; border-radius: 1rem; padding: 0.4rem 0.75rem;">
-                            {{statusText status}}
-                        </span>
-                        <span class="badge bg-secondary" style="font-weight: 500; border-radius: 1rem; padding: 0.4rem 0.75rem;">
-                            {{type_name}}
-                        </span>
-                    </div>
-                    <div class="card-body position-relative">
-                        <i class="bi bi-hand-index-thumb float-end text-muted opacity-50" style="font-size: 1.2rem;"></i>
-                        <h5 class="card-title fw-semibold" style="color: var(--dark-gray, #172033);">{{title}}</h5>
-                        <p class="card-text small text-muted">{{description}}</p>
-                        <div class="small text-muted">
-                            <div>📅 {{formatDate start_datetime}}</div>
-                            <div>📍 {{location}}</div>
-                        </div>
-                    </div>
-                    <div class="card-footer bg-white border-top-0 pt-0">
-                        {{#if (eq status "WAITING_ADMIN")}}
-                            <div class="row g-2">
-                                <div class="col-6">
-                                    <a href="/events/edit/{{id}}" class="btn btn-primary btn-sm w-100 fw-semibold" onclick="event.stopPropagation();">
-                                        ✏️ Редактировать
-                                    </a>
-                                </div>
-                                <div class="col-6">
-                                    <button class="btn btn-danger btn-sm w-100 fw-semibold" onclick="event.stopPropagation(); deleteEvent({{id}})">
-                                        🗑️ Удалить
-                                    </button>
-                                </div>
-                            </div>
-                        {{else if (eq status "APPROVED")}}
-                            {{#if (eq ../user.type 5)}}
-                                <button class="btn btn-danger btn-sm w-100 fw-semibold" onclick="event.stopPropagation(); openReasonModal({{id}}, 'cancel')">
-                                    ❌ Отменить мероприятие
-                                </button>
-                            {{else}}
-                                <div class="text-center text-muted">
-                                    <i class="bi bi-chevron-down"></i>
-                                </div>
-                            {{/if}}
-                        {{else}}
-                            <div class="text-center text-muted">
-                                <i class="bi bi-chevron-down"></i>
-                            </div>
-                        {{/if}}
-                    </div>
-                </div>
-            </div>
-        {{/each}}
-    </div>
+<section class="app-event-list" aria-label="Мои мероприятия">
+    {{#each events}}
+    <article class="app-event-row" data-event-id="{{id}}">
+        <div><span class="app-event-title">{{title}}</span><span class="app-event-description">{{description}}</span></div>
+        <div><span class="app-status app-status-{{#if (eq status "WAITING_ADMIN")}}waiting{{else if (eq status "APPROVED")}}approved{{else if (eq status "REJECTED")}}rejected{{else if (eq status "CANCELED")}}canceled{{else if (eq status "COMPLETED")}}completed{{else}}draft{{/if}}">{{statusText status}}</span><span class="app-type">{{type_name}}</span></div>
+        <div class="app-event-meta"><span>{{formatDate start_datetime}}</span>{{#if location}}<span>{{location}}</span>{{/if}}</div>
+        <div class="app-actions-row">
+            {{#if (eq status "WAITING_ADMIN")}}<a class="app-btn app-btn-secondary app-btn-sm" href="/events/edit/{{id}}">Редактировать</a><button class="app-btn app-btn-danger app-btn-sm" type="button" onclick="openReasonModal({{id}}, 'delete')">Удалить</button>
+            {{else if (eq status "APPROVED")}}{{#if ../user.permissions.moderate_event}}<button class="app-btn app-btn-danger app-btn-sm" type="button" onclick="openReasonModal({{id}}, 'cancel')">Отменить</button>{{/if}}{{/if}}
+        </div>
+    </article>
+    {{/each}}
+</section>
 {{else}}
-    <div class="alert alert-info border-0 shadow-sm" style="border-radius: 0.75rem;">
-        <p class="mb-2">У вас пока нет созданных мероприятий.</p>
-        {{#ifTeacher}}
-            <a href="/events/create" class="btn btn-primary">➕ Создать мероприятие</a>
-        {{/ifTeacher}}
-    </div>
+<section class="app-surface app-empty"><h2>Мероприятий пока нет</h2><p>Когда вы создадите событие, оно появится здесь.</p>{{#if user.permissions.create_event}}<a class="app-btn app-btn-primary" href="/events/create">Создать мероприятие</a>{{/if}}</section>
 {{/if}}

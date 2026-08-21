@@ -1,42 +1,13 @@
-<h1 class="mb-4" style="font-size: 1.8rem; font-weight: 700; color: var(--dark-gray, #172033);">🔍 Модерация мероприятий</h1>
-
+<section class="app-page-head"><div><p class="app-page-kicker">Администрирование</p><h1 class="app-page-title">Модерация мероприятий</h1><p class="app-page-summary">Проверьте детали события перед утверждением. Решение действует в рамках текущих правил согласования.</p></div></section>
 {{#if events.length}}
-<div class="row g-4">
+<section class="app-event-list" aria-label="Мероприятия на модерации">
     {{#each events}}
-    <div class="col-md-6 col-lg-4">
-        <div class="card card-outline h-100" data-event-id="{{id}}" style="cursor:pointer">
-            <div class="card-header bg-transparent border-bottom-0 d-flex justify-content-between align-items-center pt-3 pb-0">
-                <span class="badge bg-warning" style="color:#fff; font-weight:500; border-radius:1rem; padding:.4rem .75rem">⏳ Ожидает админов</span>
-                <span class="badge bg-secondary" style="font-weight:500; border-radius:1rem; padding:.4rem .75rem">{{type_name}}</span>
-            </div>
-            <div class="card-body">
-                <h5 class="card-title fw-semibold">{{title}}</h5><p class="card-text small text-muted">{{description}}</p>
-                <div class="small text-muted"><div>📅 {{formatDate start_datetime}} — {{formatDate end_datetime}}</div><div>👤 Создал: {{creator_name}}</div><div>📍 {{location}}</div></div>
-                {{#if approvals}}
-                <div class="small text-muted mt-2 pt-1 border-top"><strong>📋 Утверждения:</strong><div class="mt-1">
-                    {{#each approvals}}<span class="badge {{#if (eq status "approved")}}bg-success{{else if (eq status "rejected")}}bg-danger{{else}}bg-warning{{/if}} me-1" style="font-weight:400; font-size:.7rem; padding:.3rem .6rem">{{user_name}} (Админ) {{#if (eq status "approved")}}✅{{/if}}{{#if (eq status "rejected")}}❌{{/if}}{{#if (eq status "pending")}}⏳{{/if}}</span>{{/each}}
-                </div></div>{{/if}}
-            </div>
-            <div class="card-footer bg-white border-top-0 pt-0"><div class="d-flex flex-wrap gap-2" onclick="event.stopPropagation()">
-                <form action="/events/admin-approve/{{id}}" method="POST" class="flex-grow-1"><button type="submit" class="btn btn-success w-100 btn-sm fw-semibold">✅ Утвердить</button></form>
-                <button type="button" class="btn btn-danger btn-sm fw-semibold" onclick="openReasonModal({{id}}, 'reject')">❌ Отклонить</button>
-            </div></div>
-        </div>
-    </div>
+    <article class="app-event-row" data-event-id="{{id}}">
+        <div><span class="app-event-title">{{title}}</span><span class="app-event-description">{{description}}</span></div>
+        <div><span class="app-status app-status-waiting">Ожидает решения</span><span class="app-type">{{type_name}}</span></div>
+        <div class="app-event-meta"><span>{{formatDate start_datetime}} — {{formatDate end_datetime}}</span><span>{{creator_name}}</span>{{#if approvals}}<span>Есть решения администраторов</span>{{/if}}</div>
+        <div class="app-actions-row" onclick="event.stopPropagation()"><form action="/events/admin-approve/{{id}}" method="POST"><button type="submit" class="app-btn app-btn-primary app-btn-sm">Утвердить</button></form><button type="button" class="app-btn app-btn-danger app-btn-sm" onclick="openReasonModal({{id}}, 'reject')">Отклонить</button></div>
+    </article>
     {{/each}}
-</div>
-{{else}}
-<div class="alert alert-success border-0 shadow-sm"><h4 class="fw-semibold">✅ Все мероприятия проверены!</h4><p class="mb-0">Нет мероприятий, ожидающих модерации.</p></div>
-{{/if}}
-
-<script>
-function openReasonModal(eventId, action) {
-    const reason = prompt('Укажите причину:');
-    if (reason === null) return;
-    const form = document.createElement('form');
-    form.method = 'POST'; form.action = `/events/${action}/${eventId}`;
-    const input = document.createElement('input'); input.type = 'hidden'; input.name = `${action}_reason`; input.value = reason;
-    if (action === 'reject') input.name = 'rejection_reason';
-    form.appendChild(input); document.body.appendChild(form); form.submit();
-}
-</script>
+</section>
+{{else}}<section class="app-surface app-empty"><h2>Очередь пуста</h2><p>Все поступившие мероприятия уже рассмотрены.</p></section>{{/if}}

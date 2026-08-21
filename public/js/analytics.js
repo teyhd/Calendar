@@ -64,15 +64,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     {
                         label: 'Создано мероприятий',
                         data: created,
-                        backgroundColor: 'rgba(54, 162, 235, 0.6)',
-                        borderColor: 'rgba(54, 162, 235, 1)',
+                        backgroundColor: 'rgba(21, 94, 239, 0.76)',
+                        borderColor: 'rgba(21, 94, 239, 1)',
                         borderWidth: 1
                     },
                     {
                         label: 'Участий',
                         data: participations,
-                        backgroundColor: 'rgba(255, 206, 86, 0.6)',
-                        borderColor: 'rgba(255, 206, 86, 1)',
+                        backgroundColor: 'rgba(247, 144, 9, 0.72)',
+                        borderColor: 'rgba(247, 144, 9, 1)',
                         borderWidth: 1
                     }
                 ]
@@ -108,15 +108,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     {
                         label: 'Мероприятий',
                         data: eventsCount,
-                        backgroundColor: 'rgba(75, 192, 192, 0.6)',
-                        borderColor: 'rgba(75, 192, 192, 1)',
+                        backgroundColor: 'rgba(15, 118, 110, 0.72)',
+                        borderColor: 'rgba(15, 118, 110, 1)',
                         borderWidth: 1
                     },
                     {
                         label: 'Участников',
                         data: participants,
-                        backgroundColor: 'rgba(153, 102, 255, 0.6)',
-                        borderColor: 'rgba(153, 102, 255, 1)',
+                        backgroundColor: 'rgba(86, 64, 180, 0.72)',
+                        borderColor: 'rgba(86, 64, 180, 1)',
                         borderWidth: 1
                     }
                 ]
@@ -150,20 +150,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 datasets: [{
                     data: counts,
                     backgroundColor: [
-                        'rgba(255, 99, 132, 0.6)',
-                        'rgba(54, 162, 235, 0.6)',
-                        'rgba(255, 206, 86, 0.6)',
-                        'rgba(75, 192, 192, 0.6)',
-                        'rgba(153, 102, 255, 0.6)',
-                        'rgba(255, 159, 64, 0.6)'
+                        'rgba(21, 94, 239, 0.74)',
+                        'rgba(15, 118, 110, 0.74)',
+                        'rgba(247, 144, 9, 0.74)',
+                        'rgba(180, 35, 45, 0.74)',
+                        'rgba(86, 64, 180, 0.74)',
+                        'rgba(71, 84, 103, 0.74)'
                     ],
                     borderColor: [
-                        'rgba(255, 99, 132, 1)',
-                        'rgba(54, 162, 235, 1)',
-                        'rgba(255, 206, 86, 1)',
-                        'rgba(75, 192, 192, 1)',
-                        'rgba(153, 102, 255, 1)',
-                        'rgba(255, 159, 64, 1)'
+                        'rgba(21, 94, 239, 1)',
+                        'rgba(15, 118, 110, 1)',
+                        'rgba(247, 144, 9, 1)',
+                        'rgba(180, 35, 45, 1)',
+                        'rgba(86, 64, 180, 1)',
+                        'rgba(71, 84, 103, 1)'
                     ],
                     borderWidth: 1
                 }]
@@ -194,8 +194,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 datasets: [{
                     label: 'Количество мероприятий',
                     data: counts,
-                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                    borderColor: 'rgba(54, 162, 235, 1)',
+                    backgroundColor: 'rgba(21, 94, 239, 0.13)',
+                    borderColor: 'rgba(21, 94, 239, 1)',
                     borderWidth: 2,
                     fill: true,
                     tension: 0.1
@@ -219,10 +219,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const container = document.getElementById('studentsTable');
         if (!container) return;
         if (!data || data.length === 0) {
-            container.innerHTML = '<p class="text-muted text-center py-2">Нет данных по ученикам</p>';
+            container.innerHTML = '<p class="app-help">Нет данных по ученикам</p>';
             return;
         }
-        let html = '<table class="table table-sm table-hover"><thead><tr><th>#</th><th>Ученик</th><th>Класс</th><th>Участий</th><th>Создано</th></tr></thead><tbody>';
+        let html = '<table class="app-table"><thead><tr><th>#</th><th>Ученик</th><th>Класс</th><th>Участий</th><th>Создано</th></tr></thead><tbody>';
         data.forEach((item, index) => {
             html += `<tr>
                 <td>${index + 1}</td>
@@ -240,10 +240,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const container = document.getElementById('responsibleTable');
         if (!container) return;
         if (!data || data.length === 0) {
-            container.innerHTML = '<p class="text-muted text-center py-2">Нет данных по ответственным</p>';
+            container.innerHTML = '<p class="app-help">Нет данных по ответственным</p>';
             return;
         }
-        let html = '<table class="table table-sm table-hover"><thead><tr><th>#</th><th>Ответственный</th><th>Кол-во мероприятий</th></tr></thead><tbody>';
+        let html = '<table class="app-table"><thead><tr><th>#</th><th>Ответственный</th><th>Кол-во мероприятий</th></tr></thead><tbody>';
         data.forEach((item, index) => {
             html += `<tr>
                 <td>${index + 1}</td>
@@ -259,10 +259,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const container = document.getElementById('organizersTable');
         if (!container) return;
         if (!data || data.length === 0) {
-            container.innerHTML = '<p class="text-muted text-center py-2">Нет данных по организаторам</p>';
+            container.innerHTML = '<p class="app-help">Нет данных по организаторам</p>';
             return;
         }
-        let html = '<table class="table table-sm table-hover"><thead><tr><th>#</th><th>Организатор</th><th>Создано мероприятий</th></tr></thead><tbody>';
+        let html = '<table class="app-table"><thead><tr><th>#</th><th>Организатор</th><th>Создано мероприятий</th></tr></thead><tbody>';
         data.forEach((item, index) => {
             html += `<tr>
                 <td>${index + 1}</td>

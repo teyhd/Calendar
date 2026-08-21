@@ -1,298 +1,212 @@
-// Основные скрипты для всех страниц
-document.addEventListener('DOMContentLoaded', function() {
-    // Автоматическое скрытие сообщений об ошибках через 5 секунд
-    const alerts = document.querySelectorAll('.alert:not(.alert-permanent)');
-    alerts.forEach(alert => {
-        setTimeout(() => {
-            alert.style.transition = 'opacity 0.5s';
-            alert.style.opacity = '0';
-            setTimeout(() => alert.remove(), 500);
-        }, 5000);
-    });
+// Shared, dependency-free interaction layer for the server-rendered interface.
+(() => {
+    let lastFocusedElement = null;
 
-    // Подтверждение действий
-    document.querySelectorAll('[data-confirm]').forEach(el => {
-        el.addEventListener('click', function(e) {
-            if (!confirm(this.dataset.confirm)) {
-                e.preventDefault();
-            }
-        });
-    });
-});
-
-// ================================================================
-// === ОТКРЫТИЕ МОДАЛЬНОГО ОКНА ПО ID МЕРОПРИЯТИЯ ===
-// ================================================================
-window.openEventModal = function(eventId) {
-    console.log('openEventModal вызван с ID:', eventId);
-    
-    const modalBody = document.getElementById('eventModalBody');
-    if (modalBody) {
-        modalBody.innerHTML = `
-            <div class="text-center py-4">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">Загрузка...</span>
-                </div>
-                <p class="mt-2 text-muted">Загрузка информации о мероприятии...</p>
-            </div>
-        `;
+    function dialogById(id) {
+        return document.getElementById(id);
     }
 
-    fetch(`/api/events/${eventId}`)
-        .then(response => {
-            if (!response.ok) throw new Error('Мероприятие не найдено');
-            return response.json();
-        })
-        .then(eventData => {
-            console.log('Данные мероприятия загружены:', eventData);
-            
-            if (typeof renderEventModal === 'undefined') {
-                console.error('renderEventModal не определена!');
+    function openDialog(id, opener = document.activeElement) {
+        const dialog = dialogById(id);
+        if (!dialog || typeof dialog.showModal !== 'function') return;
+        if (!dialog.open) {
+            lastFocusedElement = opener instanceof HTMLElement ? opener : null;
+            dialog.showModal();
+        }
+    }
+
+    function closeDialog(id) {
+        const dialog = dialogById(id);
+        if (dialog?.open) dialog.close();
+    }
+
+    function closeAllPopovers(exceptId = null) {
+        document.querySelectorAll('.app-popover.is-open').forEach((popover) => {
+            if (popover.id !== exceptId) popover.classList.remove('is-open');
+        });
+        document.querySelectorAll('[data-popover-trigger][aria-expanded="true"]').forEach((button) => {
+            if (button.dataset.popoverTrigger !== exceptId) button.setAttribute('aria-expanded', 'false');
+        });
+    }
+
+    window.appUI = { openDialog, closeDialog };
+
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('.app-alert:not(.alert-permanent), .alert:not(.alert-permanent)').forEach((alert) => {
+            window.setTimeout(() => alert.remove(), 7000);
+        });
+
+        document.querySelectorAll('[data-confirm]').forEach((element) => {
+            element.addEventListener('click', (event) => {
+                if (!window.confirm(element.dataset.confirm)) event.preventDefault();
+            });
+        });
+
+        document.addEventListener('click', (event) => {
+            const closeButton = event.target.closest('[data-dialog-close]');
+            if (closeButton) {
+                closeButton.closest('dialog')?.close();
                 return;
             }
 
-            const userId = parseInt(window.currentUserId || 0);
-            const userType = parseInt(window.currentUserRole || 0);
-            
-            const isOwner = parseInt(eventData.created_by) === userId;
-            const isAdmin = userType === 5;
-            const canEdit = isAdmin || (isOwner && eventData.status === 'WAITING_ADMIN');
+            const drawerButton = event.target.closest('[data-drawer-open]');
+            if (drawerButton) {
+                openDialog(drawerButton.dataset.drawerOpen, drawerButton);
+                return;
+            }
 
-            const event = {
-                id: eventData.id,
-                title: eventData.title
-            };
+            if (event.target.closest('[data-drawer-close]')) {
+                event.target.closest('dialog')?.close();
+                return;
+            }
 
-            const props = {
-                id: eventData.id,
-                description: eventData.description || '',
-                location: eventData.location || '',
-                status: eventData.status,
-                creator: eventData.creator_name || 'Неизвестен',
-                type: eventData.type_name || 'Не указан',
-                created_by: eventData.created_by,
-                start_datetime: eventData.start_datetime,
-                end_datetime: eventData.end_datetime,
-                level: eventData.level,
-                target_audience_type: eventData.target_audience_type,
-                target_audience_id: eventData.target_audience_id,
-                is_admin_event: eventData.is_admin_event,
-                is_registration_enabled: eventData.is_registration_enabled,
-                created_at: eventData.created_at,
-                updated_at: eventData.updated_at
-            };
+            const popoverButton = event.target.closest('[data-popover-trigger]');
+            if (popoverButton) {
+                const id = popoverButton.dataset.popoverTrigger;
+                const popover = dialogById(id);
+                const shouldOpen = !popover?.classList.contains('is-open');
+                closeAllPopovers();
+                if (popover && shouldOpen) {
+                    popover.classList.add('is-open');
+                    popoverButton.setAttribute('aria-expanded', 'true');
+                }
+                return;
+            }
 
-            renderEventModal(event, props, canEdit, isAdmin, isOwner);
-            const modal = new bootstrap.Modal(document.getElementById('eventModal'));
-            modal.show();
-        })
-        .catch(error => {
-            console.error('Ошибка загрузки мероприятия:', error);
-            const modalBody = document.getElementById('eventModalBody');
-            if (modalBody) {
-                modalBody.innerHTML = `
-                    <div class="alert alert-danger m-3">
-                        <strong>Ошибка:</strong> Не удалось загрузить мероприятие.
-                        <br><small>${error.message}</small>
-                    </div>
-                `;
+            if (!event.target.closest('.app-popover-root')) closeAllPopovers();
+
+            const reviewTrigger = event.target.closest('[data-review-trigger]');
+            if (reviewTrigger) {
+                window.openReviewModal(reviewTrigger.dataset.reviewEventId, reviewTrigger.dataset.reviewText || '');
+                return;
+            }
+
+            const eventCard = event.target.closest('[data-event-id]');
+            if (eventCard && !event.target.closest('a, button, form, input, select, textarea')) {
+                window.openEventModal(eventCard.dataset.eventId, eventCard);
             }
         });
-};
 
-// ================================================================
-// === ОБРАБОТЧИК КЛИКОВ НА КАРТОЧКИ (делегирование) ===
-// ================================================================
-document.addEventListener('DOMContentLoaded', function() {
-    document.addEventListener('click', function(e) {
-        const card = e.target.closest('[data-event-id]');
-        if (!card) return;
-        
-        if (e.target.closest('a') || e.target.closest('button') || e.target.closest('form')) {
-            return;
-        }
-        
-        const eventId = card.dataset.eventId;
-        if (eventId) {
-            console.log('Клик по карточке с ID:', eventId);
-            window.openEventModal(eventId);
-        }
-    });
-});
+        document.querySelectorAll('dialog').forEach((dialog) => {
+            dialog.addEventListener('click', (event) => {
+                if (event.target === dialog) dialog.close();
+            });
+            dialog.addEventListener('close', () => {
+                if (lastFocusedElement?.isConnected) lastFocusedElement.focus();
+                lastFocusedElement = null;
+            });
+        });
 
-// ================================================================
-// === МОДАЛКА ДЛЯ ПРИЧИНЫ ОТМЕНЫ/ОТКЛОНЕНИЯ ===
-// ================================================================
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') closeAllPopovers();
+        });
 
-// Открытие модалки с причиной
-function openReasonModal(eventId, action) {
-    document.getElementById('reasonEventId').value = eventId;
-    document.getElementById('reasonAction').value = action;
-    document.getElementById('reasonText').value = '';
-    
-    const modalTitle = document.getElementById('reasonModalLabel');
-    const submitBtn = document.getElementById('submitReasonBtn');
-    
-    if (action === 'reject') {
-        modalTitle.textContent = '❌ Отклонить мероприятие';
-        submitBtn.innerHTML = '<i class="bi bi-x-lg me-1"></i> Отклонить';
-        submitBtn.className = 'btn btn-danger';
-    } else if (action === 'cancel') {
-        modalTitle.textContent = '🚫 Отменить мероприятие';
-        submitBtn.innerHTML = '<i class="bi bi-x-circle me-1"></i> Отменить';
-        submitBtn.className = 'btn btn-danger';
-    } else if (action === 'cancel_registration') {
-        modalTitle.textContent = '❌ Отменить запись';
-        submitBtn.innerHTML = '<i class="bi bi-x-circle me-1"></i> Отменить запись';
-        submitBtn.className = 'btn btn-danger';
-    } else if (action === 'delete') {
-        modalTitle.textContent = '🗑️ Удалить мероприятие';
-        submitBtn.innerHTML = '<i class="bi bi-trash me-1"></i> Удалить';
-        submitBtn.className = 'btn btn-danger';
-    }
-    
-    const modal = new bootstrap.Modal(document.getElementById('reasonModal'));
-    modal.show();
-}
-
-// Обработчик отправки причины
-document.addEventListener('DOMContentLoaded', function() {
-    const submitBtn = document.getElementById('submitReasonBtn');
-    if (submitBtn) {
-        submitBtn.addEventListener('click', function() {
+        document.getElementById('submitReasonBtn')?.addEventListener('click', () => {
             const eventId = document.getElementById('reasonEventId').value;
             const action = document.getElementById('reasonAction').value;
             const reason = document.getElementById('reasonText').value.trim();
-            
-            const modal = bootstrap.Modal.getInstance(document.getElementById('reasonModal'));
-            modal.hide();
-            
+            closeDialog('reasonModal');
             submitReason(eventId, action, reason);
         });
-    }
-    
-    const reasonText = document.getElementById('reasonText');
-    if (reasonText) {
-        reasonText.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' && e.ctrlKey) {
-                document.getElementById('submitReasonBtn').click();
+
+        document.getElementById('reasonText')?.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                event.preventDefault();
+                document.getElementById('submitReasonBtn')?.click();
             }
         });
-    }
-});
 
-// Отправка причины на сервер
-function submitReason(eventId, action, reason) {
-    const finalReason = reason || 'Причина не указана';
-    
-    if (action === 'reject') {
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = `/events/reject/${eventId}`;
-        const reasonInput = document.createElement('input');
-        reasonInput.type = 'hidden';
-        reasonInput.name = 'rejection_reason';
-        reasonInput.value = finalReason;
-        form.appendChild(reasonInput);
-        document.body.appendChild(form);
-        form.submit();
-        
-    } else if (action === 'cancel') {
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = `/events/cancel/${eventId}`;
-        const reasonInput = document.createElement('input');
-        reasonInput.type = 'hidden';
-        reasonInput.name = 'cancel_reason';
-        reasonInput.value = finalReason;
-        form.appendChild(reasonInput);
-        document.body.appendChild(form);
-        form.submit();
-        
-    } else if (action === 'cancel_registration') {
-        fetch(`/api/events/${eventId}/unregister`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ reason: finalReason })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert('✅ ' + data.message);
-                const modal = bootstrap.Modal.getInstance(document.getElementById('eventModal'));
-                if (modal) modal.hide();
-                if (window.calendar) {
-                    window.calendar.refetchEvents();
-                    loadStats();
-                }
-            } else {
-                alert('❌ ' + (data.error || 'Ошибка при отмене записи'));
-            }
-        })
-        .catch(error => {
-            console.error('Ошибка:', error);
-            alert('❌ Ошибка сервера');
-        });
-        
-    } else if (action === 'delete') {
-        if (!confirm('Вы уверены, что хотите удалить это мероприятие?')) return;
-        fetch(`/events/delete/${eventId}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        })
-        .then(response => {
-            if (response.redirected) {
-                window.location.href = response.url;
-            } else {
-                return response.text();
-            }
-        })
-        .catch(error => {
-            console.error('Ошибка удаления:', error);
-            alert('❌ Ошибка при удалении мероприятия');
-        });
-    }
-}
-
-// ================================================================
-// === МОДАЛКА ДЛЯ ОТЗЫВА ===
-// ================================================================
-
-// Открытие модалки с отзывом
-function openReviewModal(eventId, currentText) {
-    document.getElementById('reviewEventId').value = eventId;
-    document.getElementById('reviewText').value = currentText || '';
-    const modal = new bootstrap.Modal(document.getElementById('reviewModal'));
-    modal.show();
-}
-
-// Обработчик отправки отзыва
-document.addEventListener('DOMContentLoaded', function() {
-    const submitReviewBtn = document.getElementById('submitReviewBtn');
-    if (submitReviewBtn) {
-        submitReviewBtn.addEventListener('click', function() {
+        document.getElementById('submitReviewBtn')?.addEventListener('click', () => {
             const eventId = document.getElementById('reviewEventId').value;
             const reviewText = document.getElementById('reviewText').value.trim();
-            
             if (!reviewText) {
-                alert('Пожалуйста, введите текст отзыва');
+                document.getElementById('reviewText').focus();
                 return;
             }
-            
             const form = document.createElement('form');
             form.method = 'POST';
-            form.action = `/events/review/${eventId}`;
-            
+            form.action = `/events/review/${encodeURIComponent(eventId)}`;
             const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = 'review_text';
-            input.value = reviewText;
-            
-            form.appendChild(input);
-            document.body.appendChild(form);
-            form.submit();
+            input.type = 'hidden'; input.name = 'review_text'; input.value = reviewText;
+            form.appendChild(input); document.body.appendChild(form); form.submit();
         });
-    }
-});
+    });
 
-console.log('main.js загружен, openEventModal доступна:', typeof window.openEventModal);
+    window.openEventModal = function openEventModal(eventId, opener) {
+        const modalBody = document.getElementById('eventModalBody');
+        if (modalBody) modalBody.innerHTML = '<div class="app-modal-loading"><span class="app-spinner" aria-hidden="true"></span><div>Загрузка информации…</div></div>';
+        openDialog('eventModal', opener);
+
+        fetch(`/api/events/${encodeURIComponent(eventId)}`)
+            .then((response) => {
+                if (!response.ok) throw new Error('Мероприятие не найдено');
+                return response.json();
+            })
+            .then((eventData) => {
+                if (typeof window.renderEventModal !== 'function') throw new Error('Модуль календаря недоступен');
+                const userId = Number(window.currentUserId || 0);
+                const userType = Number(window.currentUserRole || 0);
+                const isOwner = Number(eventData.created_by) === userId;
+                const isAdmin = userType === 5;
+                const canEdit = isAdmin || (isOwner && eventData.status === 'WAITING_ADMIN');
+                window.renderEventModal({ id: eventData.id, title: eventData.title }, eventData, canEdit, isAdmin, isOwner);
+            })
+            .catch((error) => {
+                console.error('Не удалось загрузить мероприятие:', error);
+                if (modalBody) modalBody.innerHTML = '<div class="app-alert app-alert-danger">Не удалось загрузить информацию о мероприятии. Попробуйте ещё раз.</div>';
+            });
+    };
+
+    window.openReasonModal = function openReasonModal(eventId, action) {
+        const titles = {
+            reject: 'Отклонить мероприятие',
+            cancel: 'Отменить мероприятие',
+            cancel_registration: 'Отменить запись',
+            delete: 'Удалить мероприятие'
+        };
+        document.getElementById('reasonEventId').value = eventId;
+        document.getElementById('reasonAction').value = action;
+        document.getElementById('reasonText').value = '';
+        document.getElementById('reasonModalLabel').textContent = titles[action] || 'Укажите причину';
+        const submitButton = document.getElementById('submitReasonBtn');
+        submitButton.textContent = action === 'delete' ? 'Удалить' : action === 'cancel_registration' ? 'Отменить запись' : action === 'cancel' ? 'Отменить' : 'Отклонить';
+        submitButton.className = 'app-btn app-btn-danger';
+        openDialog('reasonModal');
+        window.setTimeout(() => document.getElementById('reasonText')?.focus(), 0);
+    };
+
+    window.openReviewModal = function openReviewModal(eventId, currentText = '') {
+        document.getElementById('reviewEventId').value = eventId;
+        document.getElementById('reviewText').value = currentText;
+        openDialog('reviewModal');
+        window.setTimeout(() => document.getElementById('reviewText')?.focus(), 0);
+    };
+
+    function submitReason(eventId, action, reason) {
+        const finalReason = reason || 'Причина не указана';
+        if (action === 'reject' || action === 'cancel') {
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = `/events/${action}/${encodeURIComponent(eventId)}`;
+            const input = document.createElement('input');
+            input.type = 'hidden'; input.name = action === 'reject' ? 'rejection_reason' : 'cancel_reason'; input.value = finalReason;
+            form.appendChild(input); document.body.appendChild(form); form.submit();
+            return;
+        }
+        if (action === 'cancel_registration') {
+            fetch(`/api/events/${encodeURIComponent(eventId)}/unregister`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: finalReason }) })
+                .then((response) => response.json())
+                .then((data) => {
+                    if (!data.success) throw new Error(data.error || 'Не удалось отменить запись');
+                    closeDialog('eventModal'); window.calendar?.refetchEvents(); window.loadStats?.();
+                })
+                .catch((error) => window.alert(error.message || 'Ошибка сервера'));
+            return;
+        }
+        if (action === 'delete' && window.confirm('Удалить мероприятие без возможности восстановления?')) {
+            fetch(`/events/delete/${encodeURIComponent(eventId)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+                .then((response) => { if (response.redirected) window.location.assign(response.url); else if (!response.ok) throw new Error('Не удалось удалить мероприятие'); })
+                .catch((error) => window.alert(error.message || 'Ошибка удаления'));
+        }
+    }
+})();
