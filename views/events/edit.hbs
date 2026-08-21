@@ -100,7 +100,7 @@
                                             <div class="col-12" style="position: relative;">
                                                 <div class="input-group">
                                                     <input type="text" class="form-control" id="userSearchInput" placeholder="Начните вводить имя пользователя..." autocomplete="off">
-                                                    <button class="btn btn-outline-secondary" type="button" id="clearSearchBtn">✕</button>
+                                                    <button class="btn btn-outline-secondary" type="button" id="clearSearchBtn" aria-label="Очистить поиск"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
                                                 </div>
                                                 <div id="searchResults" class="list-group mt-1" style="display: none; max-height: 200px; overflow-y: auto; position: absolute; z-index: 1000; left: 0; width: 100%; max-width: 350px;"></div>
                                             </div>
@@ -119,7 +119,7 @@
                                             <div class="col-12" style="position: relative;">
                                                 <div class="input-group">
                                                     <input type="text" class="form-control" id="classSearchInput" placeholder="Начните вводить название класса..." autocomplete="off">
-                                                    <button class="btn btn-outline-secondary" type="button" id="clearClassSearchBtn">✕</button>
+                                                    <button class="btn btn-outline-secondary" type="button" id="clearClassSearchBtn" aria-label="Очистить поиск класса"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
                                                 </div>
                                                 <div id="classSearchResults" class="list-group mt-1" style="display: none; max-height: 200px; overflow-y: auto; position: absolute; z-index: 1000; left: 0; width: 100%; max-width: 350px;"></div>
                                             </div>
@@ -150,7 +150,7 @@
                                     <div class="input-group">
                                         <input type="text" class="form-control" id="responsibleSearchInput" 
                                                placeholder="Начните вводить имя ответственного..." autocomplete="off">
-                                        <button class="btn btn-outline-secondary" type="button" id="clearResponsibleSearchBtn">✕</button>
+                                        <button class="btn btn-outline-secondary" type="button" id="clearResponsibleSearchBtn" aria-label="Очистить поиск ответственного"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
                                     </div>
                                     <div id="responsibleSearchResults" class="list-group mt-1" 
                                          style="display: none; max-height: 200px; overflow-y: auto; position: absolute; z-index: 1000; left: 0; width: 100%; max-width: 350px;">
@@ -371,9 +371,9 @@
                 chip.style.fontSize = '0.9rem';
                 chip.innerHTML = `
                     ${cls.name}
-                    <span role="button" class="ms-1" style="cursor:pointer;" data-classid="${cls.id}">&times;</span>
+                    <button type="button" class="app-chip-remove" aria-label="Удалить класс" data-classid="${cls.id}"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
                 `;
-                chip.querySelector('span[data-classid]').addEventListener('click', function() {
+                chip.querySelector('[data-classid]').addEventListener('click', function() {
                     removeClass(parseInt(this.dataset.classid));
                 });
                 selectedClassesContainer.appendChild(chip);
@@ -383,7 +383,6 @@
         function updateClassHiddenInput() {
             const ids = selectedClasses.map(c => c.id);
             selectedClassesHidden.value = ids.join(',');
-            console.log('Классы сохранены (edit):', selectedClassesHidden.value);
         }
 
         // Поиск классов
@@ -489,9 +488,9 @@
                 chip.style.fontSize = '0.9rem';
                 chip.innerHTML = `
                     ${user.name}
-                    <span role="button" class="ms-1" style="cursor:pointer;" data-userid="${user.id}">&times;</span>
+                    <button type="button" class="app-chip-remove" aria-label="Удалить пользователя" data-userid="${user.id}"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
                 `;
-                chip.querySelector('span[data-userid]').addEventListener('click', function() {
+                chip.querySelector('[data-userid]').addEventListener('click', function() {
                     removeUser(parseInt(this.dataset.userid));
                 });
                 selectedUsersContainer.appendChild(chip);
@@ -501,7 +500,6 @@
         function updateUserHiddenInput() {
             const ids = selectedUsers.map(u => u.id);
             selectedUsersHidden.value = ids.join(',');
-            console.log('Пользователи сохранены (edit):', selectedUsersHidden.value);
         }
 
         function roleText(type) {
@@ -620,9 +618,9 @@
                 chip.style.color = '#212529';
                 chip.innerHTML = `
                     ${user.name}
-                    <span role="button" class="ms-1" style="cursor:pointer; color: #212529;" data-responsibleid="${user.id}">&times;</span>
+                    <button type="button" class="app-chip-remove" aria-label="Удалить ответственного" data-responsibleid="${user.id}"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
                 `;
-                chip.querySelector('span[data-responsibleid]').addEventListener('click', function() {
+                chip.querySelector('[data-responsibleid]').addEventListener('click', function() {
                     removeResponsible(parseInt(this.dataset.responsibleid));
                 });
                 selectedResponsibleContainer.appendChild(chip);
@@ -632,7 +630,6 @@
         function updateResponsibleHiddenInput() {
             const ids = selectedResponsible.map(u => u.id);
             selectedResponsibleHidden.value = ids.join(',');
-            console.log('Ответственные сохранены (edit):', selectedResponsibleHidden.value);
         }
 
         // Поиск ответственных
