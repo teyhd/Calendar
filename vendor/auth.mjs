@@ -163,9 +163,10 @@ export function calendarPermissions(roleId) {
 export function extractServiceRoleID(rightClaim, serviceID) {
     if (!Array.isArray(rightClaim)) return 0;
     return rightClaim.reduce((maxRole, row) => {
-        const srvId = Number(row?.srv_id || 0);
         const roleId = Number(row?.role_id || 0);
-        return srvId === Number(serviceID) && roleId > maxRole ? roleId : maxRole;
+        const hasServiceID = Object.prototype.hasOwnProperty.call(row || {}, 'srv_id');
+        const belongsToService = !hasServiceID || Number(row.srv_id) === Number(serviceID);
+        return belongsToService && roleId > maxRole ? roleId : maxRole;
     }, 0);
 }
 

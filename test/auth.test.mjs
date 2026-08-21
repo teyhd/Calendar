@@ -53,6 +53,13 @@ test('successful code-flow token produces a Calendar session with the maximum se
     assert.equal(extractServiceRoleID(claims().right, 42), 5);
 });
 
+test('accepts roles scoped by the Calendar JWT audience while rejecting another service scope', () => {
+    const session = buildSessionFromToken(token(claims({ right: [{ role_id: 5 }] })), cfg);
+    assert.equal(readSignedSession(session, sessionSecret)?.role_id, 5);
+    assert.equal(extractServiceRoleID([{ srv_id: 9, role_id: 5 }], 42), 0);
+    assert.throws(() => buildSessionFromToken(token(claims({ right: [{ srv_id: 9, role_id: 5 }] })), cfg), /no calendar role/);
+});
+
 test('state check rejects missing and mismatched callback state', () => {
     assert.equal(stateMatches('same', 'same'), true);
     assert.equal(stateMatches('same', 'other'), false);
