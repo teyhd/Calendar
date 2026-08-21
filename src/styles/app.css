@@ -226,10 +226,11 @@
   .app-section-title { display: flex; align-items: center; gap: 9px; margin: 0 0 16px; font-family: var(--font-display); font-size: 24px; }
   .app-chart-panel { min-height: 300px; padding: 20px; }
   .app-chart-panel h2 { margin-bottom: 16px; font-family: var(--font-display); font-size: 22px; }
-  .fc { --fc-border-color: #d9e0ea; --fc-page-bg-color: #fff; --fc-neutral-bg-color: #f7f9fc; --fc-today-bg-color: #eff4ff; --fc-event-bg-color: #155eef; --fc-event-border-color: #155eef; --fc-button-bg-color: #fff; --fc-button-border-color: #bdc8d6; --fc-button-text-color: #344054; --fc-button-hover-bg-color: #eef3fb; --fc-button-hover-border-color: #8ca0ba; --fc-button-active-bg-color: #155eef; --fc-button-active-border-color: #155eef; }
+  .fc { --fc-border-color: #d9e0ea; --fc-page-bg-color: #fff; --fc-neutral-bg-color: #f7f9fc; --fc-today-bg-color: #eff4ff; --fc-event-bg-color: #155eef; --fc-event-border-color: #155eef; --fc-button-bg-color: #fff; --fc-button-border-color: #c5cfdb; --fc-button-text-color: #344054; --fc-button-hover-bg-color: #f4f7fa; --fc-button-hover-border-color: #8c9cad; --fc-button-active-bg-color: #243b55; --fc-button-active-border-color: #243b55; }
   .fc .fc-toolbar { gap: 12px; flex-wrap: wrap; padding: 2px; }
   .fc .fc-toolbar-title { font-family: var(--font-display); font-size: 25px; }
   .fc .fc-button { border-radius: 4px !important; box-shadow: none !important; font-family: var(--font-sans); font-size: 12px; font-weight: 700; text-transform: none; }
+  .fc .fc-button-primary:not(:disabled).fc-button-active { color: #fff !important; }
   .fc .fc-event { padding: 2px 4px; border-radius: 4px; font-size: 12px; font-weight: 700; }
   .fc .fc-daygrid-event .fc-event-time { display: none; }
   .fc .fc-daygrid-event .fc-daygrid-event-dot { display: none; }
