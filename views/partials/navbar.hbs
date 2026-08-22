@@ -38,6 +38,7 @@
         <a class="app-sidebar-link" href="/">Календарь</a><a class="app-sidebar-link" href="/my-events">Мои мероприятия</a><a class="app-sidebar-link" href="/events/archive">Архив</a>
         {{#if user.permissions.view_children}}<a class="app-sidebar-link" href="/child-events">Мероприятия ребёнка</a>{{/if}}
         {{#if user.permissions.create_event}}<a class="app-sidebar-link" href="/events/create">Создать мероприятие</a>{{/if}}
+        {{#if canImportYearPlan}}<a class="app-sidebar-link" href="/events/import/year-plan">Импорт графика</a>{{/if}}
         {{#if user.permissions.view_analytics}}<a class="app-sidebar-link" href="/analytics">Аналитика</a>{{/if}}
         <a class="app-sidebar-link" href="/reviews">Отзывы</a>
         {{#if user.permissions.moderate_event}}<a class="app-sidebar-link" href="/events/moderation">Модерация</a>{{/if}}
@@ -51,6 +52,7 @@
         <a class="app-drawer-link" href="/">Календарь</a><a class="app-drawer-link" href="/my-events">Мои мероприятия</a><a class="app-drawer-link" href="/events/archive">Архив</a>
         {{#if user.permissions.view_children}}<a class="app-drawer-link" href="/child-events">Мероприятия ребёнка</a>{{/if}}
         {{#if user.permissions.create_event}}<a class="app-drawer-link" href="/events/create">Создать мероприятие</a>{{/if}}
+        {{#if canImportYearPlan}}<a class="app-drawer-link" href="/events/import/year-plan">Импорт графика</a>{{/if}}
         {{#if user.permissions.view_analytics}}<a class="app-drawer-link" href="/analytics">Аналитика</a>{{/if}}
         <a class="app-drawer-link" href="/reviews">Отзывы</a>
         {{#if user.permissions.moderate_event}}<a class="app-drawer-link" href="/events/moderation">Модерация</a>{{/if}}

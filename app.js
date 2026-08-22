@@ -4,6 +4,7 @@ import { engine } from 'express-handlebars';
 import handlebars from 'handlebars';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import crypto from 'node:crypto';
 import dotenv from 'dotenv';
 import cron from 'node-cron';
 import pool from './vendor/db.mjs';
@@ -39,6 +40,21 @@ const visibleStatuses = new Set(['APPROVED', 'COMPLETED', 'CANCELED']);
 const audienceTypes = new Set(['class', 'parallel', 'department', 'specific_users', 'all', 'multiple_classes']);
 const levels = new Set(['school', 'city', 'regional', 'national', 'international']);
 const rewardTypes = new Set(['none', 'educational', 'competitive']);
+const YEAR_PLAN_IMPORT = Object.freeze({
+    sourceName: 'График года',
+    sheetName: '26-27',
+    startDate: '2026-08-22',
+    expectedCreatorName: 'Юникова Марина',
+    defaultEventType: 'Досуговое',
+    previewTtlSeconds: 15 * 60
+});
+const YEAR_PLAN_SOURCE_COLUMNS = Object.freeze([
+    { index: 2, label: 'Начальная школа', grades: [1, 2, 3, 4] },
+    { index: 3, label: '5-6 классы', grades: [5, 6] },
+    { index: 4, label: '7-9 классы', grades: [7, 8, 9] },
+    { index: 5, label: '10-11 классы', grades: [10, 11] }
+]);
+const YEAR_PLAN_HEADER = Object.freeze(['Уч. нед.', 'Дата', 'Начальная школа', '5-6 классы', '7-9 классы', '10-11 классы', 'комментарии']);
 
 app.set('trust proxy', 1);
 registerHelpers(handlebars);
@@ -51,8 +67,8 @@ app.engine('.hbs', engine({
 }));
 app.set('view engine', '.hbs');
 app.set('views', path.join(__dirname, 'views'));
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
+app.use(express.urlencoded({ extended: true, limit: '512kb' }));
+app.use(express.json({ limit: '512kb' }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(attachAuthUser);
@@ -65,6 +81,7 @@ app.all('/auth/logout', (req, res) => res.redirect(303, '/api/auth/logout'));
 app.use(async (req, res, next) => {
     res.locals.user = req.authUser || null;
     res.locals.isAuthenticated = Boolean(req.authUser);
+    res.locals.canImportYearPlan = canImportYearPlan(req.authUser);
     res.locals.notifications = [];
     res.locals.unreadCount = 0;
     if (!req.authUser) return next();
@@ -110,6 +127,197 @@ function toSqlDateTime(value, field) {
     const normalized = `${raw.replace('T', ' ')}${raw.length === 16 ? ':00' : ''}`;
     if (Number.isNaN(new Date(normalized.replace(' ', 'T')).getTime())) throw new Error(`Некорректная дата: ${field}`);
     return normalized;
+}
+
+function importError(message, status = 400) {
+    const error = new Error(message);
+    error.status = status;
+    return error;
+}
+
+function normalizedText(value) {
+    return String(value || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function normalizedPersonName(value) {
+    return normalizedText(value).toLocaleLowerCase('ru-RU');
+}
+
+function canImportYearPlan(actor) {
+    return Boolean(
+        actor?.permissions?.create_event
+        && STAFF_ROLE_IDS.includes(Number(actor.type))
+        && normalizedPersonName(actor.name) === normalizedPersonName(YEAR_PLAN_IMPORT.expectedCreatorName)
+    );
+}
+
+function assertYearPlanImportActor(actor) {
+    if (!canImportYearPlan(actor)) {
+        throw importError(`Импорт графика доступен только в активной SSO-сессии пользователя «${YEAR_PLAN_IMPORT.expectedCreatorName}».`, 403);
+    }
+}
+
+function parseCsvSnapshot(csv) {
+    if (typeof csv !== 'string' || !csv.trim()) throw importError('Загрузите непустой CSV-снимок вкладки 26-27.');
+    const rows = [];
+    let row = [];
+    let value = '';
+    let quoted = false;
+    for (let index = 0; index < csv.length; index += 1) {
+        const char = csv[index];
+        if (quoted) {
+            if (char === '"' && csv[index + 1] === '"') {
+                value += '"';
+                index += 1;
+            } else if (char === '"') {
+                quoted = false;
+            } else {
+                value += char;
+            }
+            continue;
+        }
+        if (char === '"') {
+            if (value) throw importError('CSV содержит некорректную кавычку. Экспортируйте вкладку заново из Google Sheets.');
+            quoted = true;
+        } else if (char === ',') {
+            row.push(value);
+            value = '';
+        } else if (char === '\n') {
+            row.push(value.replace(/\r$/, ''));
+            rows.push(row);
+            row = [];
+            value = '';
+        } else {
+            value += char;
+        }
+    }
+    if (quoted) throw importError('CSV содержит незакрытую кавычку. Экспортируйте вкладку заново из Google Sheets.');
+    if (value || row.length) {
+        row.push(value.replace(/\r$/, ''));
+        rows.push(row);
+    }
+    if (rows[0]?.[0]?.charCodeAt(0) === 0xFEFF) rows[0][0] = rows[0][0].slice(1);
+    return rows.filter((cells) => cells.some((cell) => String(cell || '').length));
+}
+
+function sourceDateToIso(value) {
+    const match = normalizedText(value).toLocaleLowerCase('ru-RU').match(/^(?:[а-яё]{2}\s+)?(\d{1,2})\s+([а-яё]+)$/u);
+    if (!match) return null;
+    const monthNumbers = {
+        января: 1, февраля: 2, марта: 3, апреля: 4, мая: 5, июня: 6,
+        июля: 7, августа: 8, сентября: 9, октября: 10, ноября: 11, декабря: 12
+    };
+    const day = Number(match[1]);
+    const month = monthNumbers[match[2]];
+    if (!month || day < 1 || day > 31) return null;
+    const year = month >= 8 ? 2026 : 2027;
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function validateYearPlanSnapshot(rows, fileName) {
+    if (!/26[-–—]27/u.test(String(fileName || ''))) throw importError('Имя CSV должно содержать «26-27», чтобы исключить импорт другой вкладки.');
+    const header = rows[0];
+    if (!header || YEAR_PLAN_HEADER.some((expected, index) => normalizedText(header[index]) !== expected)) {
+        throw importError('CSV не похож на экспорт вкладки «26-27»: не совпадает строка заголовков.');
+    }
+}
+
+function sourceDescription({ hash, sourceRows, sourceColumns, comment, note }) {
+    const provenance = `Импорт: ${YEAR_PLAN_IMPORT.sourceName}/${YEAR_PLAN_IMPORT.sheetName}; SHA-256=${hash}; строка CSV ${sourceRows.join(', ')}; колонки ${sourceColumns.join(', ')}`;
+    if (note) return `${provenance}\nСлужебная заметка: ${note}`;
+    return comment ? `${provenance}\nКомментарий: ${comment}` : provenance;
+}
+
+export function buildYearPlanImportRecords(csv, fileName = '26-27.csv') {
+    const rows = parseCsvSnapshot(csv);
+    validateYearPlanSnapshot(rows, fileName);
+    const snapshotHash = crypto.createHash('sha256').update(csv, 'utf8').digest('hex');
+    const grouped = new Map();
+    const records = [];
+
+    for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
+        const row = rows[rowIndex];
+        const sourceDate = sourceDateToIso(row[1]);
+        if (!sourceDate || sourceDate < YEAR_PLAN_IMPORT.startDate) continue;
+        const sourceRow = rowIndex + 1;
+        const comment = String(row[6] || '').trim();
+        const populatedColumns = YEAR_PLAN_SOURCE_COLUMNS
+            .map((column) => ({ ...column, title: String(row[column.index] || '').trim() }))
+            .filter((column) => column.title);
+
+        if (!populatedColumns.length && comment) {
+            records.push({
+                title: `Служебная заметка — ${sourceDate.split('-').reverse().join('.')}`,
+                description: sourceDescription({ hash: snapshotHash, sourceRows: [sourceRow], sourceColumns: ['комментарии'], note: comment }),
+                sourceRows: [sourceRow],
+                sourceColumns: ['комментарии'],
+                sourceValues: [{ column: 'комментарии', value: comment }],
+                sourceDate,
+                audienceAll: true,
+                grades: []
+            });
+            continue;
+        }
+
+        for (const column of populatedColumns) {
+            const key = `${sourceDate}\u0000${column.title}`;
+            const record = grouped.get(key) || {
+                title: column.title,
+                description: null,
+                sourceRows: [sourceRow],
+                sourceColumns: [],
+                sourceValues: comment ? [{ column: 'комментарии', value: comment }] : [],
+                sourceDate,
+                audienceAll: false,
+                grades: [],
+                comment
+            };
+            if (!record.sourceRows.includes(sourceRow)) record.sourceRows.push(sourceRow);
+            if (!record.sourceColumns.includes(column.label)) record.sourceColumns.push(column.label);
+            record.sourceValues.push({ column: column.label, value: column.title });
+            record.grades.push(...column.grades);
+            grouped.set(key, record);
+        }
+    }
+
+    for (const record of grouped.values()) {
+        record.grades = [...new Set(record.grades)].sort((left, right) => left - right);
+        record.audienceAll = record.sourceColumns.length === YEAR_PLAN_SOURCE_COLUMNS.length;
+        record.description = sourceDescription({
+            hash: snapshotHash,
+            sourceRows: record.sourceRows,
+            sourceColumns: record.sourceColumns,
+            comment: record.comment
+        });
+        delete record.comment;
+        records.push(record);
+    }
+    if (!records.length) throw importError(`В CSV нет записей начиная с ${YEAR_PLAN_IMPORT.startDate.split('-').reverse().join('.')}.`);
+    return { snapshotHash, records };
+}
+
+function importPreviewSignature(actorId, snapshotHash, expiresAt) {
+    const secret = process.env.AUTH_SESSION_SECRET || process.env.JWT_SECRET;
+    if (!secret) throw importError('Не настроен секрет для подтверждения импорта.', 503);
+    return crypto.createHmac('sha256', secret).update(`${actorId}:${snapshotHash}:${expiresAt}`).digest('base64url');
+}
+
+function createImportPreviewToken(actorId, snapshotHash) {
+    const expiresAt = Math.floor(Date.now() / 1000) + YEAR_PLAN_IMPORT.previewTtlSeconds;
+    return { expiresAt, signature: importPreviewSignature(actorId, snapshotHash, expiresAt) };
+}
+
+function verifyImportPreviewToken(actorId, snapshotHash, expiresAt, signature) {
+    if (!Number.isInteger(Number(expiresAt)) || Number(expiresAt) < Math.floor(Date.now() / 1000)) {
+        throw importError('Срок действия предварительного просмотра истёк. Загрузите CSV повторно.');
+    }
+    const expected = importPreviewSignature(actorId, snapshotHash, Number(expiresAt));
+    const actual = String(signature || '');
+    if (!actual || actual.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(actual), Buffer.from(expected))) {
+        throw importError('Подтверждение не соответствует проверенному CSV-снимку.', 403);
+    }
 }
 
 function userNameMap(people) {
@@ -234,17 +442,25 @@ async function formData() {
     return { types, subjects, classes, departments, users };
 }
 
-async function normalizeEventInput(body) {
+async function normalizeEventInput(body, validationContext = null) {
     const title = String(body.title || '').trim();
     const description = String(body.description || '').trim() || null;
     if (!title || title.length > 100 || description?.length > 500) throw new Error('Проверьте название и описание мероприятия');
     const eventTypeId = Number(body.event_type_id);
-    const [eventTypes] = await pool.query('SELECT id FROM event_types WHERE id = ?', [eventTypeId]);
-    if (!eventTypes.length) throw new Error('Выберите существующий тип мероприятия');
+    if (validationContext?.eventTypeIds) {
+        if (!validationContext.eventTypeIds.has(eventTypeId)) throw new Error('Выберите существующий тип мероприятия');
+    } else {
+        const [eventTypes] = await pool.query('SELECT id FROM event_types WHERE id = ?', [eventTypeId]);
+        if (!eventTypes.length) throw new Error('Выберите существующий тип мероприятия');
+    }
     const subjectId = body.subject_id ? Number(body.subject_id) : null;
     if (subjectId) {
-        const [subjects] = await pool.query('SELECT id FROM subjects WHERE id = ?', [subjectId]);
-        if (!subjects.length) throw new Error('Выберите существующий предмет');
+        if (validationContext?.subjectIds) {
+            if (!validationContext.subjectIds.has(subjectId)) throw new Error('Выберите существующий предмет');
+        } else {
+            const [subjects] = await pool.query('SELECT id FROM subjects WHERE id = ?', [subjectId]);
+            if (!subjects.length) throw new Error('Выберите существующий предмет');
+        }
     }
     const start = toSqlDateTime(body.start_datetime, 'начала');
     const end = toSqlDateTime(body.end_datetime, 'окончания');
@@ -254,21 +470,22 @@ async function normalizeEventInput(body) {
     const rawAudience = audienceType === 'specific_users' || audienceType === 'multiple_classes' ? body.target_audience_ids : body.target_audience_id;
     let audienceId = null;
     if (audienceType === 'class') {
-        const kaf = await getKafById(rawAudience, 1);
-        if (!kaf) throw new Error('Выберите существующий класс');
-        audienceId = String(kaf.id);
+        const classId = Number(rawAudience);
+        if (validationContext?.classIds ? !validationContext.classIds.has(classId) : !(await getKafById(classId, 1))) throw new Error('Выберите существующий класс');
+        audienceId = String(classId);
     } else if (audienceType === 'department') {
         const kaf = await getKafById(rawAudience, 2);
         if (!kaf) throw new Error('Выберите существующую кафедру');
         audienceId = String(kaf.id);
     } else if (audienceType === 'parallel') {
         const parallel = String(rawAudience || '').trim();
-        const classes = await listClasses();
+        const classes = validationContext?.classes || await listClasses();
         if (!parallel || !classes.some((item) => parallelFromName(item.name) === parallel)) throw new Error('Выберите существующую параллель');
         audienceId = parallel;
     } else if (audienceType === 'multiple_classes') {
         const ids = parseIdList(rawAudience);
-        if (!ids.length || !(await Promise.all(ids.map((id) => getKafById(id, 1)))).every(Boolean)) throw new Error('Выберите существующие классы');
+        const valid = validationContext?.classIds ? ids.every((id) => validationContext.classIds.has(id)) : (await Promise.all(ids.map((id) => getKafById(id, 1)))).every(Boolean);
+        if (!ids.length || !valid) throw new Error('Выберите существующие классы');
         audienceId = ids.join(',');
     } else if (audienceType === 'specific_users') {
         const ids = parseIdList(rawAudience);
@@ -278,7 +495,11 @@ async function normalizeEventInput(body) {
     }
     const responsibleIds = parseIdList(body.responsible_ids);
     if (!responsibleIds.length) throw new Error('Выберите хотя бы одного ответственного');
-    await assertActiveUsers(responsibleIds, STAFF_ROLE_IDS);
+    if (validationContext?.staffUserIds) {
+        if (!responsibleIds.every((id) => validationContext.staffUserIds.has(id))) throw new Error('Выбранный пользователь недоступен в SSO');
+    } else {
+        await assertActiveUsers(responsibleIds, STAFF_ROLE_IDS);
+    }
     const departmentId = body.department_id ? Number(body.department_id) : null;
     if (departmentId && !(await getKafById(departmentId, 2))) throw new Error('Указана несуществующая кафедра');
     const rewardType = body.enable_rewards ? String(body.reward_type || 'educational') : 'none';
@@ -316,6 +537,84 @@ async function resetApprovals(connection, eventId, admins) {
     }
 }
 
+async function insertEventAwaitingApproval(connection, input, creatorId, admins) {
+    const [result] = await connection.query(`
+        INSERT INTO events (title, description, event_type_id, department_id, subject_id, start_datetime, end_datetime, location, level, status, target_audience_type, target_audience_id, is_admin_event, is_registration_enabled, reward_type, reward_places, created_by, responsible_ids)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'WAITING_ADMIN', ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [input.title, input.description, input.eventTypeId, input.departmentId, input.subjectId, input.start, input.end, input.location, input.level, input.audienceType, input.audienceId, input.isAdminEvent, input.registrationEnabled, input.rewardType, input.rewardPlaces, creatorId, input.responsibleIds]);
+    await resetApprovals(connection, result.insertId, admins);
+    return Number(result.insertId);
+}
+
+function resolveYearPlanAudience(record, classes) {
+    if (record.audienceAll) return { type: 'all', ids: [] };
+    const classIds = classes
+        .filter((item) => record.grades.includes(Number(parallelFromName(item.name))))
+        .map((item) => Number(item.id));
+    const missingGrades = record.grades.filter((grade) => !classIds.some((id) => {
+        const classItem = classes.find((item) => Number(item.id) === id);
+        return Number(parallelFromName(classItem?.name)) === grade;
+    }));
+    if (missingGrades.length) {
+        throw importError(`Строка CSV ${record.sourceRows.join(', ')}: в SSO нет активного класса для параллели ${missingGrades.join(', ')}.`);
+    }
+    return { type: 'multiple_classes', ids: [...new Set(classIds)] };
+}
+
+async function prepareYearPlanImport(csv, fileName, actor) {
+    assertYearPlanImportActor(actor);
+    const { snapshotHash, records } = buildYearPlanImportRecords(csv, fileName);
+    const [[eventTypes], classes, staff, admins] = await Promise.all([
+        pool.query('SELECT id, name FROM event_types WHERE name = ?', [YEAR_PLAN_IMPORT.defaultEventType]),
+        listClasses(),
+        listActiveUsers(STAFF_ROLE_IDS),
+        getCalendarAdmins()
+    ]);
+    const eventType = eventTypes[0];
+    if (!eventType) throw importError(`В Calendar отсутствует тип мероприятия «${YEAR_PLAN_IMPORT.defaultEventType}».`);
+    if (!admins.length) throw importError('В SSO нет назначенных администраторов Calendar.');
+    const staffUserIds = new Set(staff.map((item) => Number(item.id)));
+    if (!staffUserIds.has(Number(actor.id))) throw importError('Учётная запись Юниковой Марины недоступна среди активных сотрудников SSO.', 403);
+    const validationContext = {
+        eventTypeIds: new Set([Number(eventType.id)]),
+        classIds: new Set(classes.map((item) => Number(item.id))),
+        classes,
+        staffUserIds
+    };
+    const preparedRecords = [];
+    for (const record of records) {
+        const audience = resolveYearPlanAudience(record, classes);
+        const input = await normalizeEventInput({
+            title: record.title,
+            description: record.description,
+            event_type_id: eventType.id,
+            start_datetime: `${record.sourceDate}T09:00`,
+            end_datetime: `${record.sourceDate}T18:00`,
+            target_audience_type: audience.type,
+            target_audience_ids: audience.ids.join(','),
+            responsible_ids: String(actor.id),
+            level: 'school'
+        }, validationContext);
+        preparedRecords.push({ ...record, input, audience });
+    }
+    const marker = `Импорт: ${YEAR_PLAN_IMPORT.sourceName}/${YEAR_PLAN_IMPORT.sheetName}; SHA-256=${snapshotHash};`;
+    const [existing] = await pool.query('SELECT id FROM events WHERE description LIKE ? LIMIT 1', [`${marker}%`]);
+    if (existing.length) throw importError('Этот CSV-снимок уже был импортирован. Повторный запуск не создаёт дубли.', 409);
+    return { snapshotHash, marker, records: preparedRecords, admins };
+}
+
+function yearPlanImportSummary(prepared) {
+    return {
+        events: prepared.records.length,
+        notes: prepared.records.filter((record) => record.sourceColumns.length === 1 && record.sourceColumns[0] === 'комментарии').length,
+        allAudience: prepared.records.filter((record) => record.audience.type === 'all').length,
+        multipleClasses: prepared.records.filter((record) => record.audience.type === 'multiple_classes').length,
+        sourceRows: [...new Set(prepared.records.flatMap((record) => record.sourceRows))].length,
+        startsAt: YEAR_PLAN_IMPORT.startDate,
+        defaultTime: '09:00–18:00'
+    };
+}
+
 async function autoCompleteEvents() {
     try {
         const [events] = await pool.query("SELECT id, title, created_by FROM events WHERE status = 'APPROVED' AND end_datetime < NOW()");
@@ -351,8 +650,10 @@ async function sendEventReminders() {
     }
 }
 
-cron.schedule('0 * * * *', autoCompleteEvents);
-cron.schedule('*/15 * * * *', sendEventReminders);
+if (process.env.NODE_ENV !== 'test') {
+    cron.schedule('0 * * * *', autoCompleteEvents);
+    cron.schedule('*/15 * * * *', sendEventReminders);
+}
 
 app.get('/', requirePageAuth, async (req, res) => {
     try {
@@ -378,6 +679,97 @@ app.get('/events/create', requirePageAuth, requirePermission('create_event'), as
     catch (error) { pageError(res, 500, 'Ошибка загрузки формы'); }
 });
 
+app.get('/events/import/year-plan', requirePageAuth, requirePermission('create_event'), (req, res) => {
+    try {
+        assertYearPlanImportActor(user(req));
+        res.render('events/year-plan-import', {
+            title: 'Импорт годового графика',
+            importStartDate: YEAR_PLAN_IMPORT.startDate.split('-').reverse().join('.'),
+            creatorName: YEAR_PLAN_IMPORT.expectedCreatorName
+        });
+    } catch (error) {
+        pageError(res, error.status || 400, error.message || 'Импорт недоступен');
+    }
+});
+
+app.post('/api/events/import/year-plan/preview', requireApiAuth, requirePermission('create_event'), async (req, res) => {
+    try {
+        const prepared = await prepareYearPlanImport(req.body?.csv, req.body?.fileName, user(req));
+        const preview = createImportPreviewToken(user(req).id, prepared.snapshotHash);
+        res.json({
+            success: true,
+            snapshot: {
+                source: `${YEAR_PLAN_IMPORT.sourceName}/${YEAR_PLAN_IMPORT.sheetName}`,
+                fileName: String(req.body.fileName || ''),
+                sha256: prepared.snapshotHash,
+                startDate: YEAR_PLAN_IMPORT.startDate
+            },
+            summary: yearPlanImportSummary(prepared),
+            preview,
+            examples: prepared.records.slice(0, 8).map((record) => ({
+                title: record.input.title,
+                date: record.sourceDate,
+                sourceRows: record.sourceRows,
+                audience: record.audience.type === 'all' ? 'Все пользователи' : `Классы: ${record.audience.ids.length}`
+            }))
+        });
+    } catch (error) {
+        mlog('[ERROR]', 'Предпросмотр импорта годового графика', error.message);
+        apiError(res, error.status || 400, error.message || 'Не удалось проверить CSV-снимок');
+    }
+});
+
+app.post('/api/events/import/year-plan/commit', requireApiAuth, requirePermission('create_event'), async (req, res) => {
+    let connection;
+    try {
+        assertYearPlanImportActor(user(req));
+        const snapshot = buildYearPlanImportRecords(req.body?.csv, req.body?.fileName);
+        verifyImportPreviewToken(user(req).id, snapshot.snapshotHash, req.body?.expiresAt, req.body?.signature);
+        const prepared = await prepareYearPlanImport(req.body?.csv, req.body?.fileName, user(req));
+        connection = await pool.getConnection();
+        await connection.beginTransaction();
+        const manifestRecords = [];
+        for (const record of prepared.records) {
+            const eventId = await insertEventAwaitingApproval(connection, { ...record.input, isAdminEvent: 0 }, user(req).id, prepared.admins);
+            manifestRecords.push({
+                eventId,
+                sourceRows: record.sourceRows,
+                sourceColumns: record.sourceColumns,
+                sourceValues: record.sourceValues,
+                sourceDate: record.sourceDate,
+                title: record.input.title
+            });
+        }
+        await connection.commit();
+        connection.release();
+        connection = null;
+        const summary = yearPlanImportSummary(prepared);
+        const notificationText = `Импорт графика «${YEAR_PLAN_IMPORT.sheetName}» завершён: ${summary.events} мероприятий ожидают модерации.`;
+        await Promise.all(prepared.admins.map((admin) => createNotification(admin.id, null, 'year_plan_import', notificationText)));
+        res.json({
+            success: true,
+            summary,
+            manifest: {
+                source: YEAR_PLAN_IMPORT.sourceName,
+                sheet: YEAR_PLAN_IMPORT.sheetName,
+                fileName: String(req.body.fileName || ''),
+                sha256: prepared.snapshotHash,
+                importedAt: new Date().toISOString(),
+                createdBy: { id: Number(user(req).id), name: user(req).name },
+                records: manifestRecords
+            }
+        });
+    } catch (error) {
+        if (connection) {
+            try { await connection.rollback(); } catch (rollbackError) { mlog('[ERROR]', 'Откат импорта годового графика', rollbackError.message); }
+        }
+        mlog('[ERROR]', 'Импорт годового графика', error.message);
+        apiError(res, error.status || 400, error.message || 'Не удалось импортировать CSV-снимок');
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
 app.post('/events/create', requirePageAuth, requirePermission('create_event'), async (req, res) => {
     try {
         const input = await normalizeEventInput(req.body);
@@ -385,13 +777,9 @@ app.post('/events/create', requirePageAuth, requirePermission('create_event'), a
         const connection = await pool.getConnection();
         try {
             await connection.beginTransaction();
-            const [result] = await connection.query(`
-                INSERT INTO events (title, description, event_type_id, department_id, subject_id, start_datetime, end_datetime, location, level, status, target_audience_type, target_audience_id, is_admin_event, is_registration_enabled, reward_type, reward_places, created_by, responsible_ids)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'WAITING_ADMIN', ?, ?, ?, ?, ?, ?, ?, ?)
-            `, [input.title, input.description, input.eventTypeId, input.departmentId, input.subjectId, input.start, input.end, input.location, input.level, input.audienceType, input.audienceId, user(req).type === 5 ? input.isAdminEvent : 0, input.registrationEnabled, input.rewardType, input.rewardPlaces, user(req).id, input.responsibleIds]);
-            await resetApprovals(connection, result.insertId, admins);
+            const eventId = await insertEventAwaitingApproval(connection, { ...input, isAdminEvent: user(req).type === 5 ? input.isAdminEvent : 0 }, user(req).id, admins);
             await connection.commit();
-            await notifyAdmins(result.insertId, 'new_event', `Новое мероприятие «${input.title}» ожидает утверждения администраторами.`);
+            await notifyAdmins(eventId, 'new_event', `Новое мероприятие «${input.title}» ожидает утверждения администраторами.`);
             res.redirect('/');
         } catch (error) { await connection.rollback(); throw error; } finally { connection.release(); }
     } catch (error) { mlog('[ERROR]', 'Создание мероприятия', error.message); pageError(res, 400, error.message || 'Ошибка сервера'); }
@@ -829,4 +1217,8 @@ app.use((error, req, res, next) => {
 const PORT = Number(process.env.PORT || 3000);
 const listenOptions = { port: PORT };
 if (process.env.HOST) listenOptions.host = process.env.HOST;
-app.listen(listenOptions, () => mlog(`Calendar started on http://${listenOptions.host || 'localhost'}:${PORT}`));
+if (process.env.NODE_ENV !== 'test') {
+    app.listen(listenOptions, () => mlog(`Calendar started on http://${listenOptions.host || 'localhost'}:${PORT}`));
+}
+
+export { app, parseCsvSnapshot, sourceDateToIso, YEAR_PLAN_IMPORT };
