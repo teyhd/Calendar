@@ -44,7 +44,7 @@ const YEAR_PLAN_IMPORT = Object.freeze({
     sourceName: 'График года',
     sheetName: '26-27',
     startDate: '2026-08-22',
-    expectedCreatorName: 'Юникова Марина',
+    expectedCreatorName: 'Юникова Марина Витальевна',
     defaultEventType: 'Досуговое',
     previewTtlSeconds: 15 * 60
 });
@@ -143,7 +143,7 @@ function normalizedPersonName(value) {
     return normalizedText(value).toLocaleLowerCase('ru-RU');
 }
 
-function canImportYearPlan(actor) {
+export function canImportYearPlan(actor) {
     return Boolean(
         actor?.permissions?.create_event
         && STAFF_ROLE_IDS.includes(Number(actor.type))

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 process.env.NODE_ENV = 'test';
-const { buildYearPlanImportRecords, parseCsvSnapshot, sourceDateToIso } = await import('../app.js');
+const { buildYearPlanImportRecords, canImportYearPlan, parseCsvSnapshot, sourceDateToIso } = await import('../app.js');
 
 const header = 'Уч. нед.,Дата,Начальная школа,5-6 классы,7-9 классы,10-11 классы,комментарии';
 
@@ -57,4 +57,11 @@ test('CSV parser keeps quoted commas and escaped quotes in source comments', () 
         ['Дата', 'комментарии'],
         ['вт 1 сентября', 'Точка, сборки: "вестибюль"']
     ]);
+});
+
+test('year-plan import accepts only the confirmed full SSO identity of Marina', () => {
+    const baseActor = { type: 2, permissions: { create_event: true } };
+    assert.equal(canImportYearPlan({ ...baseActor, name: 'Юникова Марина Витальевна' }), true);
+    assert.equal(canImportYearPlan({ ...baseActor, name: 'Юникова Марина' }), false);
+    assert.equal(canImportYearPlan({ ...baseActor, name: 'Другой пользователь' }), false);
 });
