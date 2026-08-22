@@ -119,6 +119,28 @@ function apiError(res, status, message) {
     return res.status(status).json({ error: message });
 }
 
+function wantsJSON(req) {
+    return req.path.startsWith('/api/') || String(req.get('accept') || '').includes('application/json');
+}
+
+function successResponse(req, res, payload = {}) {
+    return wantsJSON(req) ? res.json({ success: true, ...payload }) : null;
+}
+
+function workspaceURL(params = {}) {
+    const search = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+        if (value != null && value !== '' && value !== 'all') search.set(key, String(value));
+    }
+    const suffix = search.toString();
+    return suffix ? `/?${suffix}` : '/';
+}
+
+function workspaceRedirect(req, res, params = {}) {
+    const response = successResponse(req, res, params);
+    return response || res.redirect(303, workspaceURL(params));
+}
+
 function toSqlDateTime(value, field) {
     const raw = String(value || '').trim();
     if (!/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?$/.test(raw)) {
@@ -425,6 +447,74 @@ async function visibleEventsFor(actor, { includeArchived = false } = {}) {
     return filtered;
 }
 
+const archivedEventStatuses = new Set(['REJECTED', 'CANCELED', 'COMPLETED']);
+
+function normalizedEventStatus(value) {
+    const status = String(value || 'all').toUpperCase();
+    if (status === 'WAITING') return 'WAITING_ADMIN';
+    return ['APPROVED', 'WAITING_ADMIN', 'REJECTED', 'CANCELED', 'COMPLETED', 'DRAFT', 'all'].includes(status) ? status : 'all';
+}
+
+export function shouldPublishAfterApproval(pendingApprovals) {
+    return Number(pendingApprovals) === 0;
+}
+
+async function participantsByEvent(eventIds) {
+    if (!eventIds.length) return new Map();
+    const [rows] = await pool.query(
+        `SELECT event_id, user_id FROM event_participants WHERE event_id IN (${eventIds.map(() => '?').join(',')})`,
+        eventIds
+    );
+    const result = new Map();
+    for (const row of rows) result.set(Number(row.event_id), [...(result.get(Number(row.event_id)) || []), Number(row.user_id)]);
+    return result;
+}
+
+async function workspaceEventsFor(actor, query = {}) {
+    const scope = String(query.scope || 'all');
+    const needsArchive = ['archive', 'reviews'].includes(scope) || ['REJECTED', 'CANCELED', 'COMPLETED'].includes(normalizedEventStatus(query.status));
+    let events = await visibleEventsFor(actor, { includeArchived: needsArchive });
+
+    if (scope === 'moderation') {
+        events = actor.type === 5 ? (await getEvents("WHERE e.status = 'WAITING_ADMIN'")) : [];
+    } else if (scope === 'archive') {
+        events = events.filter((event) => archivedEventStatuses.has(event.status));
+    } else if (scope === 'reviews') {
+        events = events.filter((event) => event.review_text);
+    } else if (scope === 'mine') {
+        const participants = await participantsByEvent(events.map((event) => event.id));
+        if (actor.type === 1) {
+            events = events.filter((event) => sameUserId(event.created_by, actor.id) || (participants.get(Number(event.id)) || []).some((id) => sameUserId(id, actor.id)));
+        } else if (actor.type === 6) {
+            const children = await getChildrenForParent(actor.id);
+            const childIds = new Set(children.map((child) => Number(child.id)));
+            events = events.filter((event) => (participants.get(Number(event.id)) || []).some((id) => childIds.has(Number(id))));
+        } else {
+            events = events.filter((event) => sameUserId(event.created_by, actor.id));
+        }
+    } else if (scope === 'children') {
+        if (actor.type !== 6) return [];
+        const children = await getChildrenForParent(actor.id);
+        const childById = new Map(children.map((child) => [Number(child.id), child]));
+        const participants = await participantsByEvent(events.map((event) => event.id));
+        events = events.map((event) => {
+            const participant = (participants.get(Number(event.id)) || []).find((id) => childById.has(Number(id)));
+            return { ...event, child_name: participant ? childById.get(Number(participant)).name : null };
+        });
+    }
+
+    const status = normalizedEventStatus(query.status);
+    const typeId = Number(query.type);
+    const search = String(query.search || '').trim().toLocaleLowerCase('ru-RU');
+    return events.filter((event) => {
+        if (status !== 'all' && event.status !== status) return false;
+        if (Number.isSafeInteger(typeId) && typeId > 0 && Number(event.event_type_id) !== typeId) return false;
+        if (search) return [event.title, event.description, event.location, event.type_name, event.creator_name, event.audience_name]
+            .some((value) => String(value || '').toLocaleLowerCase('ru-RU').includes(search));
+        return true;
+    });
+}
+
 async function createNotification(userId, eventId, type, message) {
     try {
         await pool.query(
@@ -664,35 +754,26 @@ if (process.env.NODE_ENV !== 'test') {
 app.get('/', requirePageAuth, async (req, res) => {
     try {
         const [types] = await pool.query('SELECT * FROM event_types ORDER BY name');
-        res.render('calendar/index', { title: 'Календарь мероприятий', types });
+        res.render('calendar/index', { title: 'Календарь мероприятий', types, workspaceState: {
+            scope: String(req.query.scope || 'all'),
+            panel: String(req.query.panel || ''),
+            event: Number(req.query.event) || null,
+            compose: String(req.query.compose || '')
+        } });
     } catch (error) {
         mlog('[ERROR]', 'Загрузка календаря', error.code || error.message);
         pageError(res, 500, 'Ошибка сервера');
     }
 });
 
-app.get('/admin/settings', requirePageAuth, requirePermission('manage_settings'), async (req, res) => {
-    try {
-        const [classes, departments, subjects, eventTypes] = await Promise.all([
-            listClasses(), listDepartments(), pool.query('SELECT * FROM subjects ORDER BY name').then(([rows]) => rows), pool.query('SELECT * FROM event_types ORDER BY name').then(([rows]) => rows)
-        ]);
-        res.render('admin/settings', { title: 'Настройки системы', classes, departments, subjects, eventTypes });
-    } catch (error) { pageError(res, 500, 'Ошибка сервера'); }
-});
+app.get('/admin/settings', requirePageAuth, requirePermission('manage_settings'), (req, res) => workspaceRedirect(req, res, { panel: 'settings' }));
 
-app.get('/events/create', requirePageAuth, requirePermission('create_event'), async (req, res) => {
-    try { res.render('events/create', { title: 'Создание мероприятия', ...(await formData()), selectedIds: [], selectedClassIds: [], selectedResponsibleIds: [] }); }
-    catch (error) { pageError(res, 500, 'Ошибка загрузки формы'); }
-});
+app.get('/events/create', requirePageAuth, requirePermission('create_event'), (req, res) => workspaceRedirect(req, res, { compose: 'create' }));
 
 app.get('/events/import/year-plan', requirePageAuth, requirePermission('create_event'), (req, res) => {
     try {
         assertYearPlanImportActor(user(req));
-        res.render('events/year-plan-import', {
-            title: 'Импорт годового графика',
-            importStartDate: YEAR_PLAN_IMPORT.startDate.split('-').reverse().join('.'),
-            creatorName: YEAR_PLAN_IMPORT.expectedCreatorName
-        });
+        workspaceRedirect(req, res, { panel: 'import' });
     } catch (error) {
         pageError(res, error.status || 400, error.message || 'Импорт недоступен');
     }
@@ -786,7 +867,7 @@ app.post('/events/create', requirePageAuth, requirePermission('create_event'), a
             const eventId = await insertEventAwaitingApproval(connection, { ...input, isAdminEvent: user(req).type === 5 ? input.isAdminEvent : 0 }, user(req).id, admins);
             await connection.commit();
             await notifyAdmins(eventId, 'new_event', `Новое мероприятие «${input.title}» ожидает утверждения администраторами.`);
-            res.redirect('/');
+            workspaceRedirect(req, res, { event: eventId, scope: 'mine' });
         } catch (error) { await connection.rollback(); throw error; } finally { connection.release(); }
     } catch (error) { mlog('[ERROR]', 'Создание мероприятия', error.message); pageError(res, 400, error.message || 'Ошибка сервера'); }
 });
@@ -800,11 +881,19 @@ async function renderEventForm(req, res, view, title) {
 }
 
 app.get('/events/copy/:id', requirePageAuth, requirePermission('create_event'), async (req, res) => {
-    try { await renderEventForm(req, res, 'events/create', 'Повтор заявки'); } catch (error) { pageError(res, 500, 'Ошибка загрузки мероприятия'); }
+    try {
+        const event = await getEvent(req.params.id);
+        if (!event || (!sameUserId(event.created_by, user(req).id) && user(req).type !== 5)) return pageError(res, 404, 'Мероприятие не найдено или доступ запрещён');
+        workspaceRedirect(req, res, { event: event.id, compose: 'copy', scope: 'archive' });
+    } catch (error) { pageError(res, 500, 'Ошибка загрузки мероприятия'); }
 });
 
 app.get('/events/edit/:id', requirePageAuth, requirePermission('create_event'), async (req, res) => {
-    try { await renderEventForm(req, res, 'events/edit', 'Редактирование мероприятия'); } catch (error) { pageError(res, 500, 'Ошибка загрузки мероприятия'); }
+    try {
+        const event = await getEvent(req.params.id);
+        if (!event || (!sameUserId(event.created_by, user(req).id) && user(req).type !== 5)) return pageError(res, 404, 'Мероприятие не найдено или доступ запрещён');
+        workspaceRedirect(req, res, { event: event.id, compose: 'edit' });
+    } catch (error) { pageError(res, 500, 'Ошибка загрузки мероприятия'); }
 });
 
 app.post('/events/edit/:id', requirePageAuth, requirePermission('create_event'), async (req, res) => {
@@ -821,48 +910,21 @@ app.post('/events/edit/:id', requirePageAuth, requirePermission('create_event'),
             await resetApprovals(connection, event.id, admins);
             await connection.commit();
             await notifyAdmins(event.id, 'edited', `Мероприятие «${input.title}» изменено и снова ожидает утверждения.`);
-            res.redirect('/');
+            workspaceRedirect(req, res, { event: event.id, scope: 'mine' });
         } catch (error) { await connection.rollback(); throw error; } finally { connection.release(); }
     } catch (error) { mlog('[ERROR]', 'Редактирование мероприятия', error.message); pageError(res, 400, error.message || 'Ошибка сервера'); }
 });
 
 app.get('/my-events', requirePageAuth, async (req, res) => {
-    try {
-        let events;
-        if (user(req).type === 1) {
-            events = await getEvents('WHERE e.created_by = ? OR EXISTS (SELECT 1 FROM event_participants ep WHERE ep.event_id = e.id AND ep.user_id = ?)', [user(req).id, user(req).id]);
-        } else if (user(req).type === 6) {
-            const children = await getChildrenForParent(user(req).id);
-            const childIds = children.map((child) => child.id);
-            events = childIds.length ? await getEvents(`WHERE EXISTS (SELECT 1 FROM event_participants ep WHERE ep.event_id = e.id AND ep.user_id IN (${childIds.map(() => '?').join(',')}))`, childIds) : [];
-        } else {
-            events = await getEvents('WHERE e.created_by = ?', [user(req).id]);
-        }
-        res.render('events/my-events', { title: 'Мои мероприятия', events, user: res.locals.user });
-    } catch (error) { pageError(res, 500, 'Ошибка сервера'); }
+    workspaceRedirect(req, res, { scope: 'mine' });
 });
 
 app.get('/child-events', requirePageAuth, requirePermission('view_children'), async (req, res) => {
-    try {
-        const children = await getChildrenForParent(user(req).id);
-        const events = await visibleEventsFor(user(req));
-        const childById = new Map(children.map((child) => [child.id, child]));
-        const result = [];
-        for (const event of events) {
-            const [participants] = await pool.query('SELECT user_id FROM event_participants WHERE event_id = ?', [event.id]);
-            const participant = participants.find((item) => childById.has(Number(item.user_id)));
-            result.push({ ...event, student_name: participant ? childById.get(Number(participant.user_id)).name : null });
-        }
-        res.render('events/child-events', { title: 'Мероприятия ребёнка', events: result, message: children.length ? null : 'В SSO нет активных детей, связанных с вашим аккаунтом.' });
-    } catch (error) { pageError(res, 500, 'Ошибка сервера'); }
+    workspaceRedirect(req, res, { scope: 'children' });
 });
 
 app.get('/events/moderation', requirePageAuth, requirePermission('moderate_event'), async (req, res) => {
-    try {
-        const events = await getEvents("WHERE e.status = 'WAITING_ADMIN'");
-        const approvals = await approvalsForEvents(events.map((event) => event.id));
-        res.render('events/moderation', { title: 'Модерация мероприятий', events: events.map((event) => ({ ...event, approvals: approvals.get(event.id) || [] })), userRole: user(req).type });
-    } catch (error) { pageError(res, 500, 'Ошибка сервера'); }
+    workspaceRedirect(req, res, { scope: 'moderation' });
 });
 
 async function approvalsForEvents(eventIds) {
@@ -930,7 +992,7 @@ app.get('/events/moderation/result/:id', requirePageAuth, requirePermission('mod
     try {
         const event = await getEvent(req.params.id);
         if (!event) return pageError(res, 404, 'Мероприятие не найдено');
-        res.render('events/moderation-result', { title: 'Результат модерации', event, outcome: moderationOutcome(event.status) });
+        workspaceRedirect(req, res, { event: event.id, scope: event.status === 'WAITING_ADMIN' ? 'moderation' : 'all' });
     } catch (error) { pageError(res, 500, 'Не удалось получить результат модерации'); }
 });
 
@@ -957,9 +1019,11 @@ app.post('/events/admin-approve/:id', requirePageAuth, requirePermission('modera
                 if (approval.status === 'pending') {
                     await connection.query("UPDATE event_approvals SET status = 'approved' WHERE id = ?", [approval.id]);
                 }
-                await connection.query("DELETE FROM event_approvals WHERE event_id = ? AND id <> ? AND status = 'pending'", [eventId, approval.id]);
-                await connection.query("UPDATE events SET status = 'APPROVED', approved_by = ? WHERE id = ? AND status = 'WAITING_ADMIN'", [user(req).id, eventId]);
-                publishedNow = true;
+                const [pending] = await connection.query("SELECT COUNT(*) AS count FROM event_approvals WHERE event_id = ? AND role_type = 'admin' AND status = 'pending'", [eventId]);
+                if (shouldPublishAfterApproval(pending[0]?.count)) {
+                    const [update] = await connection.query("UPDATE events SET status = 'APPROVED', approved_by = ? WHERE id = ? AND status = 'WAITING_ADMIN'", [user(req).id, eventId]);
+                    publishedNow = update.affectedRows === 1;
+                }
             }
             await connection.commit();
         } catch (error) { await connection.rollback(); throw error; } finally { connection.release(); }
@@ -967,7 +1031,7 @@ app.post('/events/admin-approve/:id', requirePageAuth, requirePermission('modera
             await createNotification(event.created_by, eventId, 'approved', `Мероприятие «${event.title}» утверждено и опубликовано.`);
             await notifyAdmins(eventId, 'approved', `Мероприятие «${event.title}» утверждено и опубликовано.`, user(req).id);
         }
-        res.redirect(303, `/events/moderation/result/${eventId}`);
+        workspaceRedirect(req, res, { event: eventId, scope: publishedNow ? 'all' : 'moderation' });
     } catch (error) { pageError(res, 400, error.message || 'Ошибка сервера'); }
 });
 
@@ -1001,7 +1065,7 @@ app.post('/events/reject/:id', requirePageAuth, requirePermission('moderate_even
             await createNotification(event.created_by, eventId, 'rejected', `Мероприятие «${event.title}» отклонено. Причина: ${reason}`);
             await notifyAdmins(eventId, 'rejected', `Мероприятие «${event.title}» отклонено администратором ${user(req).name}.`, user(req).id);
         }
-        res.redirect(303, `/events/moderation/result/${eventId}`);
+        workspaceRedirect(req, res, { event: eventId, scope: 'archive' });
     } catch (error) { pageError(res, 400, error.message || 'Ошибка сервера'); }
 });
 
@@ -1018,28 +1082,94 @@ app.post('/events/resend/:id', requirePageAuth, requirePermission('create_event'
             await connection.commit();
         } catch (error) { await connection.rollback(); throw error; } finally { connection.release(); }
         await notifyAdmins(event.id, 'resubmitted', `Мероприятие «${event.title}» повторно отправлено на утверждение.`);
-        res.redirect('/');
+        workspaceRedirect(req, res, { event: event.id, scope: 'mine' });
     } catch (error) { pageError(res, 500, 'Ошибка сервера'); }
 });
 
 app.get('/events/archive', requirePageAuth, async (req, res) => {
-    try {
-        const events = (await visibleEventsFor(user(req), { includeArchived: true })).filter((event) => ['COMPLETED', 'CANCELED', 'REJECTED'].includes(event.status));
-        res.render('events/archive', { title: 'Архив мероприятий', events, userType: user(req).type, user: res.locals.user });
-    } catch (error) { pageError(res, 500, 'Ошибка сервера'); }
+    workspaceRedirect(req, res, { scope: 'archive' });
 });
 
 app.get('/analytics', requirePageAuth, requirePermission('view_analytics'), async (req, res) => {
-    try {
-        const [eventTypes] = await pool.query('SELECT id, name FROM event_types ORDER BY name');
-        const teachers = user(req).type === 5 ? await listActiveUsers([2, 3, 4]) : [];
-        res.render('analytics', { title: 'Аналитика', user: res.locals.user, showAllData: user(req).type === 5, userKaf: user(req).kaf, userId: user(req).id, eventTypes, teachers });
-    } catch (error) { pageError(res, 500, 'Ошибка сервера'); }
+    workspaceRedirect(req, res, { panel: 'analytics' });
 });
 
 app.get('/api/events', requireApiAuth, async (req, res) => {
-    try { res.json(await visibleEventsFor(user(req))); }
+    try { res.json(await workspaceEventsFor(user(req), req.query)); }
     catch (error) { mlog('[ERROR]', 'API событий', error.message); apiError(res, 500, 'Ошибка сервера'); }
+});
+
+app.get('/api/workspace', requireApiAuth, async (req, res) => {
+    try {
+        const actor = user(req);
+        const [types, allEvents] = await Promise.all([
+            pool.query('SELECT id, name FROM event_types ORDER BY name').then(([rows]) => rows),
+            visibleEventsFor(actor, { includeArchived: true })
+        ]);
+        const [children, teachers] = await Promise.all([
+            actor.type === 6 ? getChildrenForParent(actor.id) : [],
+            actor.type === 5 ? listActiveUsers([2, 3, 4]) : []
+        ]);
+        res.json({
+            user: { id: actor.id, name: actor.name, type: actor.type, role_name: actor.role_name, permissions: actor.permissions },
+            types,
+            children: children.map((child) => ({ id: child.id, name: child.name, class_name: child.kaf_name || '' })),
+            teachers: teachers.map((teacher) => ({ id: teacher.id, name: teacher.name })),
+            can_import_year_plan: canImportYearPlan(actor),
+            counts: {
+                all: allEvents.length,
+                approved: allEvents.filter((event) => event.status === 'APPROVED').length,
+                pending: allEvents.filter((event) => event.status === 'WAITING_ADMIN').length,
+                archive: allEvents.filter((event) => archivedEventStatuses.has(event.status)).length,
+                reviews: allEvents.filter((event) => event.review_text).length
+            }
+        });
+    } catch (error) { apiError(res, 500, 'Не удалось загрузить рабочее пространство'); }
+});
+
+app.get('/api/event-form-options', requireApiAuth, requirePermission('create_event'), async (req, res) => {
+    try {
+        const options = await formData();
+        res.json({
+            ...options,
+            defaults: {
+                responsible_ids: [Number(user(req).id)],
+                level: 'school',
+                target_audience_type: 'class'
+            }
+        });
+    } catch (error) { apiError(res, 500, 'Не удалось загрузить форму мероприятия'); }
+});
+
+app.get('/api/workspace/settings', requireApiAuth, requirePermission('manage_settings'), async (req, res) => {
+    try {
+        const [classes, departments, subjects, eventTypes] = await Promise.all([
+            listClasses(), listDepartments(), pool.query('SELECT * FROM subjects ORDER BY name').then(([rows]) => rows), pool.query('SELECT * FROM event_types ORDER BY name').then(([rows]) => rows)
+        ]);
+        res.json({ classes, departments, subjects, event_types: eventTypes });
+    } catch (error) { apiError(res, 500, 'Не удалось загрузить справочники'); }
+});
+
+app.get('/api/notifications', requireApiAuth, async (req, res) => {
+    try {
+        const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 100);
+        const [rows] = await pool.query('SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT ?', [user(req).id, limit]);
+        res.json(rows);
+    } catch (error) { apiError(res, 500, 'Не удалось загрузить уведомления'); }
+});
+
+app.post('/api/notifications/mark-all-read', requireApiAuth, async (req, res) => {
+    try {
+        await pool.query('UPDATE notifications SET is_read = 1 WHERE user_id = ?', [user(req).id]);
+        res.json({ success: true });
+    } catch (error) { apiError(res, 500, 'Не удалось обновить уведомления'); }
+});
+
+app.post('/api/notifications/:id/read', requireApiAuth, async (req, res) => {
+    try {
+        await pool.query('UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?', [Number(req.params.id), user(req).id]);
+        res.json({ success: true });
+    } catch (error) { apiError(res, 500, 'Не удалось обновить уведомление'); }
 });
 
 app.get('/api/events/:id', requireApiAuth, async (req, res) => {
@@ -1125,7 +1255,7 @@ app.post('/events/delete/:id', requirePageAuth, requirePermission('create_event'
         if (!event || (!sameUserId(event.created_by, user(req).id) && user(req).type !== 5)) return pageError(res, 403, 'Доступ запрещён');
         if (!editableStatuses.has(event.status)) return pageError(res, 400, 'Удалить можно только ожидающее или отклонённое мероприятие');
         await pool.query('DELETE FROM events WHERE id = ?', [event.id]);
-        res.redirect('/my-events');
+        workspaceRedirect(req, res, { scope: 'mine', deleted: event.id });
     } catch (error) { pageError(res, 500, 'Ошибка сервера'); }
 });
 
@@ -1137,15 +1267,12 @@ app.post('/events/review/:id', requirePageAuth, async (req, res) => {
         const review = String(req.body.review_text || '').trim();
         if (!review || review.length > 5000) return pageError(res, 400, 'Некорректный отзыв');
         await pool.query('UPDATE events SET review_text = ?, review_author_id = ?, review_created_at = NOW() WHERE id = ?', [review, user(req).id, event.id]);
-        res.redirect('/events/archive');
+        workspaceRedirect(req, res, { event: event.id, scope: 'archive' });
     } catch (error) { pageError(res, 500, 'Ошибка сервера'); }
 });
 
 app.get('/reviews', requirePageAuth, async (req, res) => {
-    try {
-        const events = (await visibleEventsFor(user(req), { includeArchived: true })).filter((event) => event.review_text);
-        res.render('reviews', { title: 'Отзывы', reviews: events });
-    } catch (error) { pageError(res, 500, 'Ошибка сервера'); }
+    workspaceRedirect(req, res, { scope: 'reviews' });
 });
 
 app.post('/events/cancel/:id', requirePageAuth, requirePermission('cancel_event'), async (req, res) => {
@@ -1158,20 +1285,17 @@ app.post('/events/cancel/:id', requirePageAuth, requirePermission('cancel_event'
         const [participants] = await pool.query('SELECT user_id FROM event_participants WHERE event_id = ?', [event.id]);
         await Promise.all(participants.filter((item) => item.user_id !== event.created_by).map((item) => createNotification(item.user_id, event.id, 'canceled', `Мероприятие «${event.title}» отменено. Причина: ${reason}`)));
         await notifyAdmins(event.id, 'canceled', `Мероприятие «${event.title}» отменено администратором ${user(req).name}.`, user(req).id);
-        res.redirect('/');
+        workspaceRedirect(req, res, { event: event.id, scope: 'archive' });
     } catch (error) { pageError(res, 500, 'Ошибка сервера'); }
 });
 
 app.get('/notifications/all', requirePageAuth, async (req, res) => {
-    try {
-        const [allNotifications] = await pool.query('SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC', [user(req).id]);
-        res.render('notifications/all', { title: 'Все уведомления', allNotifications });
-    } catch (error) { pageError(res, 500, 'Ошибка сервера'); }
+    workspaceRedirect(req, res, { panel: 'notifications' });
 });
 
 app.post('/notifications/mark-all-read', requirePageAuth, async (req, res) => {
     await pool.query('UPDATE notifications SET is_read = 1 WHERE user_id = ?', [user(req).id]);
-    res.redirect('/notifications/all');
+    workspaceRedirect(req, res, { panel: 'notifications' });
 });
 
 app.post('/notifications/mark-read/:id', requireApiAuth, async (req, res) => {
@@ -1183,8 +1307,15 @@ app.get('/api/analytics', requireApiAuth, requirePermission('view_analytics'), a
     try {
         const events = await getEvents();
         const canSeeAll = user(req).type === 5;
+        const period = String(req.query.period || 'month');
+        const periodStart = new Date();
+        if (period === 'week') periodStart.setDate(periodStart.getDate() - 7);
+        else if (period === 'month') periodStart.setMonth(periodStart.getMonth() - 1);
+        else if (period === 'quarter') periodStart.setMonth(periodStart.getMonth() - 3);
+        else if (period === 'year') periodStart.setFullYear(periodStart.getFullYear() - 1);
         const filtered = events.filter((event) => {
             if (!['APPROVED', 'COMPLETED', 'REJECTED', 'CANCELED'].includes(event.status)) return false;
+            if (period !== 'all' && new Date(event.start_datetime) < periodStart) return false;
             if (!canSeeAll && !sameUserId(event.created_by, user(req).id) && !parseIdList(event.responsible_ids).some((id) => sameUserId(id, user(req).id))) return false;
             if (req.query.type && req.query.type !== 'all' && Number(req.query.type) !== Number(event.event_type_id)) return false;
             if (canSeeAll && req.query.teacher && req.query.teacher !== 'all' && Number(req.query.teacher) !== Number(event.created_by)) return false;
@@ -1193,7 +1324,7 @@ app.get('/api/analytics', requireApiAuth, requirePermission('view_analytics'), a
         const [participantRows] = await pool.query('SELECT event_id, user_id FROM event_participants');
         const participantEvents = new Map();
         for (const row of participantRows) participantEvents.set(Number(row.event_id), [...(participantEvents.get(Number(row.event_id)) || []), Number(row.user_id)]);
-        const people = userNameMap(await getActiveUsersByIds(participantRows.map((row) => row.user_id).concat(filtered.map((event) => event.created_by))));
+        const people = userNameMap(await getActiveUsersByIds(participantRows.map((row) => row.user_id).concat(filtered.map((event) => event.created_by), filtered.flatMap((event) => parseIdList(event.responsible_ids)))));
         const totals = {
             total_events: filtered.length,
             approved_count: filtered.filter((event) => event.status === 'APPROVED').length,
@@ -1208,9 +1339,20 @@ app.get('/api/analytics', requireApiAuth, requirePermission('view_analytics'), a
         filtered.forEach((event) => (participantEvents.get(event.id) || []).forEach((id) => participation.set(id, (participation.get(id) || 0) + 1)));
         const teachers = countBy(new Map([...created].filter(([id]) => [2, 3, 4].includes(people.get(Number(id))?.type))), 'created_events').map((row) => ({ ...row, participations: participation.get(row.id) || 0 })).sort((a, b) => b.created_events - a.created_events).slice(0, 10);
         const students = countBy(new Map([...participation].filter(([id]) => people.get(Number(id))?.type === 1)), 'participations').map((row) => ({ ...row, created_events: created.get(row.id) || 0, class_name: people.get(row.id)?.kaf_name || '' })).sort((a, b) => b.participations - a.participations).slice(0, 10);
+        const classStats = new Map();
+        filtered.forEach((event) => (participantEvents.get(event.id) || []).forEach((id) => {
+            const className = people.get(Number(id))?.kaf_name;
+            if (!className) return;
+            const value = classStats.get(className) || { name: className, events: new Set(), participants: new Set() };
+            value.events.add(event.id); value.participants.add(Number(id)); classStats.set(className, value);
+        }));
+        const responsibleCounts = new Map();
+        filtered.forEach((event) => parseIdList(event.responsible_ids).forEach((id) => responsibleCounts.set(id, (responsibleCounts.get(id) || 0) + 1)));
         const typeCounts = new Map(); filtered.forEach((event) => typeCounts.set(event.type_name || 'Без типа', (typeCounts.get(event.type_name || 'Без типа') || 0) + 1));
         const timelineCounts = new Map(); filtered.forEach((event) => { const date = String(event.start_datetime).slice(0, 10); timelineCounts.set(date, (timelineCounts.get(date) || 0) + 1); });
-        res.json({ totals, teachers, classes: [], event_types: [...typeCounts].map(([type_name, count]) => ({ type_name, count })), timeline: [...timelineCounts].map(([date, count]) => ({ date, count })), students, responsible: [], organizers: countBy(created, 'created_events').sort((a, b) => b.created_events - a.created_events).slice(0, 10) });
+        const classes = [...classStats.values()].map((item) => ({ name: item.name, events_count: item.events.size, participants_count: item.participants.size })).sort((a, b) => b.events_count - a.events_count).slice(0, 10);
+        const responsible = countBy(responsibleCounts, 'responsible_count').sort((a, b) => b.responsible_count - a.responsible_count).slice(0, 10);
+        res.json({ totals, teachers, classes, event_types: [...typeCounts].map(([type_name, count]) => ({ type_name, count })), timeline: [...timelineCounts].map(([date, count]) => ({ date, count })), students, responsible, organizers: countBy(created, 'created_events').sort((a, b) => b.created_events - a.created_events).slice(0, 10) });
     } catch (error) { apiError(res, 500, 'Ошибка сервера'); }
 });
 
@@ -1227,4 +1369,4 @@ if (process.env.NODE_ENV !== 'test') {
     app.listen(listenOptions, () => mlog(`Calendar started on http://${listenOptions.host || 'localhost'}:${PORT}`));
 }
 
-export { app, parseCsvSnapshot, sourceDateToIso, YEAR_PLAN_IMPORT };
+export { app, parseCsvSnapshot, sourceDateToIso, YEAR_PLAN_IMPORT, normalizedEventStatus, workspaceURL };

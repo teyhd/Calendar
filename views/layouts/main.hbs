@@ -78,8 +78,30 @@
         </section>
     </dialog>
 
+    <dialog class="app-dialog app-dialog-side" id="eventComposer" aria-labelledby="eventComposerLabel">
+        <section class="app-dialog-panel">
+            <header class="app-dialog-head">
+                <div><p class="app-page-kicker" id="eventComposerKicker">Мероприятие</p><h2 class="app-dialog-title" id="eventComposerLabel">Создать мероприятие</h2></div>
+                <button class="app-icon-button" type="button" data-dialog-close aria-label="Закрыть"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            </header>
+            <div class="app-dialog-body" id="eventComposerBody"><div class="app-modal-loading"><span class="app-spinner" aria-hidden="true"></span><div>Загрузка формы…</div></div></div>
+        </section>
+    </dialog>
+
+    <dialog class="app-dialog app-dialog-wide" id="workspacePanel" aria-labelledby="workspacePanelLabel">
+        <section class="app-dialog-panel">
+            <header class="app-dialog-head">
+                <h2 class="app-dialog-title" id="workspacePanelLabel">Рабочий раздел</h2>
+                <button class="app-icon-button" type="button" data-dialog-close aria-label="Закрыть"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+            </header>
+            <div class="app-dialog-body" id="workspacePanelBody"></div>
+        </section>
+    </dialog>
+
     <script src="/vendor/fullcalendar/index.global.min.js"></script>
+    <script src="/vendor/chart.js/chart.umd.js"></script>
     <script src="/js/main.js"></script>
     <script src="/js/calendar.js"></script>
+    <script src="/js/workspace.js"></script>
 </body>
 </html>
