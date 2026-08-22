@@ -143,6 +143,12 @@ function normalizedPersonName(value) {
     return normalizedText(value).toLocaleLowerCase('ru-RU');
 }
 
+function sameUserId(left, right) {
+    const leftId = Number(left);
+    const rightId = Number(right);
+    return Number.isSafeInteger(leftId) && leftId > 0 && leftId === rightId;
+}
+
 export function canImportYearPlan(actor) {
     return Boolean(
         actor?.permissions?.create_event
@@ -394,8 +400,8 @@ async function getEvents(where = '', params = []) {
     return enrichEvents(rows);
 }
 
-async function eventVisibleTo(event, actor, children = null) {
-    if (actor.type === 5 || Number(event.created_by) === actor.id) return true;
+export async function eventVisibleTo(event, actor, children = null) {
+    if (actor.type === 5 || sameUserId(event.created_by, actor.id)) return true;
     if (Number(event.is_admin_event)) return false;
     if (!visibleStatuses.has(event.status)) return false;
     const targets = actor.type === 6 ? (children || await getChildrenForParent(actor.id)) : [actor];
@@ -413,7 +419,7 @@ async function visibleEventsFor(actor, { includeArchived = false } = {}) {
     const children = actor.type === 6 ? await getChildrenForParent(actor.id) : null;
     const filtered = [];
     for (const event of events) {
-        if (!includeArchived && ['REJECTED', 'CANCELED', 'COMPLETED'].includes(event.status) && actor.type !== 5 && event.created_by !== actor.id) continue;
+        if (!includeArchived && ['REJECTED', 'CANCELED', 'COMPLETED'].includes(event.status) && actor.type !== 5 && !sameUserId(event.created_by, actor.id)) continue;
         if (await eventVisibleTo(event, actor, children)) filtered.push(event);
     }
     return filtered;
@@ -787,7 +793,7 @@ app.post('/events/create', requirePageAuth, requirePermission('create_event'), a
 
 async function renderEventForm(req, res, view, title) {
     const event = await getEvent(req.params.id);
-    if (!event || (event.created_by !== user(req).id && user(req).type !== 5)) return pageError(res, 404, 'Мероприятие не найдено или доступ запрещён');
+    if (!event || (!sameUserId(event.created_by, user(req).id) && user(req).type !== 5)) return pageError(res, 404, 'Мероприятие не найдено или доступ запрещён');
     const selectedIds = event.target_audience_type === 'specific_users' ? parseIdList(event.target_audience_id) : [];
     const selectedClassIds = event.target_audience_type === 'multiple_classes' ? parseIdList(event.target_audience_id) : [];
     res.render(view, { title, event, ...(await formData()), selectedIds, selectedClassIds, selectedResponsibleIds: parseIdList(event.responsible_ids) });
@@ -804,7 +810,7 @@ app.get('/events/edit/:id', requirePageAuth, requirePermission('create_event'), 
 app.post('/events/edit/:id', requirePageAuth, requirePermission('create_event'), async (req, res) => {
     try {
         const event = await getEvent(req.params.id);
-        if (!event || (event.created_by !== user(req).id && user(req).type !== 5)) return pageError(res, 403, 'Доступ запрещён');
+        if (!event || (!sameUserId(event.created_by, user(req).id) && user(req).type !== 5)) return pageError(res, 403, 'Доступ запрещён');
         if (!editableStatuses.has(event.status)) return pageError(res, 400, 'Редактировать можно только ожидающее или отклонённое мероприятие');
         const input = await normalizeEventInput(req.body);
         const admins = await getCalendarAdmins();
@@ -1002,7 +1008,7 @@ app.post('/events/reject/:id', requirePageAuth, requirePermission('moderate_even
 app.post('/events/resend/:id', requirePageAuth, requirePermission('create_event'), async (req, res) => {
     try {
         const event = await getEvent(req.params.id);
-        if (!event || event.created_by !== user(req).id || event.status !== 'REJECTED') return pageError(res, 400, 'Можно повторно отправить только своё отклонённое мероприятие');
+        if (!event || !sameUserId(event.created_by, user(req).id) || event.status !== 'REJECTED') return pageError(res, 400, 'Можно повторно отправить только своё отклонённое мероприятие');
         const admins = await getCalendarAdmins();
         const connection = await pool.getConnection();
         try {
@@ -1106,7 +1112,7 @@ app.get('/api/events/:id/participants', requireApiAuth, async (req, res) => {
 app.post('/api/events/:id/complete', requireApiAuth, async (req, res) => {
     try {
         const event = await getEvent(req.params.id);
-        if (!event || (event.created_by !== user(req).id && user(req).type !== 5)) return apiError(res, 403, 'Доступ запрещён');
+        if (!event || (!sameUserId(event.created_by, user(req).id) && user(req).type !== 5)) return apiError(res, 403, 'Доступ запрещён');
         if (event.status !== 'APPROVED') return apiError(res, 400, 'Можно завершить только утверждённое мероприятие');
         await pool.query("UPDATE events SET status = 'COMPLETED' WHERE id = ?", [event.id]);
         res.json({ success: true });
@@ -1116,7 +1122,7 @@ app.post('/api/events/:id/complete', requireApiAuth, async (req, res) => {
 app.post('/events/delete/:id', requirePageAuth, requirePermission('create_event'), async (req, res) => {
     try {
         const event = await getEvent(req.params.id);
-        if (!event || (event.created_by !== user(req).id && user(req).type !== 5)) return pageError(res, 403, 'Доступ запрещён');
+        if (!event || (!sameUserId(event.created_by, user(req).id) && user(req).type !== 5)) return pageError(res, 403, 'Доступ запрещён');
         if (!editableStatuses.has(event.status)) return pageError(res, 400, 'Удалить можно только ожидающее или отклонённое мероприятие');
         await pool.query('DELETE FROM events WHERE id = ?', [event.id]);
         res.redirect('/my-events');
@@ -1127,7 +1133,7 @@ app.post('/events/review/:id', requirePageAuth, async (req, res) => {
     try {
         const event = await getEvent(req.params.id);
         if (!event || !(await eventVisibleTo(event, user(req)))) return pageError(res, 404, 'Мероприятие не найдено');
-        if (![event.created_by, ...parseIdList(event.responsible_ids)].includes(user(req).id) && user(req).type !== 5) return pageError(res, 403, 'Доступ запрещён');
+        if (![event.created_by, ...parseIdList(event.responsible_ids)].some((id) => sameUserId(id, user(req).id)) && user(req).type !== 5) return pageError(res, 403, 'Доступ запрещён');
         const review = String(req.body.review_text || '').trim();
         if (!review || review.length > 5000) return pageError(res, 400, 'Некорректный отзыв');
         await pool.query('UPDATE events SET review_text = ?, review_author_id = ?, review_created_at = NOW() WHERE id = ?', [review, user(req).id, event.id]);
@@ -1179,7 +1185,7 @@ app.get('/api/analytics', requireApiAuth, requirePermission('view_analytics'), a
         const canSeeAll = user(req).type === 5;
         const filtered = events.filter((event) => {
             if (!['APPROVED', 'COMPLETED', 'REJECTED', 'CANCELED'].includes(event.status)) return false;
-            if (!canSeeAll && event.created_by !== user(req).id && !parseIdList(event.responsible_ids).includes(user(req).id)) return false;
+            if (!canSeeAll && !sameUserId(event.created_by, user(req).id) && !parseIdList(event.responsible_ids).some((id) => sameUserId(id, user(req).id))) return false;
             if (req.query.type && req.query.type !== 'all' && Number(req.query.type) !== Number(event.event_type_id)) return false;
             if (canSeeAll && req.query.teacher && req.query.teacher !== 'all' && Number(req.query.teacher) !== Number(event.created_by)) return false;
             return true;

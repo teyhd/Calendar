@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 process.env.NODE_ENV = 'test';
-const { buildYearPlanImportRecords, canImportYearPlan, parseCsvSnapshot, sourceDateToIso } = await import('../app.js');
+const { buildYearPlanImportRecords, canImportYearPlan, eventVisibleTo, parseCsvSnapshot, sourceDateToIso } = await import('../app.js');
 
 const header = 'Уч. нед.,Дата,Начальная школа,5-6 классы,7-9 классы,10-11 классы,комментарии';
 
@@ -64,4 +64,10 @@ test('year-plan import accepts only the confirmed full SSO identity of Marina', 
     assert.equal(canImportYearPlan({ ...baseActor, name: 'Юникова Марина Витальевна' }), true);
     assert.equal(canImportYearPlan({ ...baseActor, name: 'Юникова Марина' }), false);
     assert.equal(canImportYearPlan({ ...baseActor, name: 'Другой пользователь' }), false);
+});
+
+test('creator sees pending events when the SSO user ID is a string', async () => {
+    const event = { created_by: 147, status: 'WAITING_ADMIN', is_admin_event: 0 };
+    assert.equal(await eventVisibleTo(event, { id: '147', type: 3 }), true);
+    assert.equal(await eventVisibleTo(event, { id: '148', type: 3 }), false);
 });
