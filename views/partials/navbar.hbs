@@ -7,18 +7,10 @@
         <a class="app-brand" href="/" aria-label="Школьный календарь — главная"><span class="app-brand-mark" aria-hidden="true">A</span><span>Школьный календарь</span></a>
         <span class="app-topbar-spacer" aria-hidden="true"></span>
         <div class="app-actions">
-            <div class="app-popover-root">
-                <button class="app-icon-button" type="button" data-popover-trigger="notificationsMenu" aria-expanded="false" aria-controls="notificationsMenu" aria-label="Уведомления">
-                    <svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>
-                    {{#if unreadCount}}<span class="app-unread">{{unreadCount}}</span>{{/if}}
-                </button>
-                <div class="app-popover app-popover-right" id="notificationsMenu" role="menu">
-                    {{#if notifications.length}}
-                        {{#each notifications}}<a class="app-popover-item" href="/notifications/all" role="menuitem"><strong>{{message}}</strong><br><span class="app-help">{{formatDate created_at}}{{#unless is_read}} · Новое{{/unless}}</span></a>{{/each}}
-                        <div class="app-popover-divider"></div><a class="app-popover-item" href="/notifications/all" role="menuitem">Все уведомления</a>
-                    {{else}}<span class="app-popover-item app-help">Новых уведомлений нет</span>{{/if}}
-                </div>
-            </div>
+            <a class="app-icon-button" href="/?panel=notifications" aria-label="Уведомления">
+                <svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+                {{#if unreadCount}}<span class="app-unread">{{unreadCount}}</span>{{/if}}
+            </a>
             <div class="app-popover-root">
                 <button class="app-user-button" type="button" data-popover-trigger="profileMenu" aria-expanded="false" aria-controls="profileMenu" aria-label="Профиль: {{user.name}}">
                     <span class="app-avatar" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3"/><path d="M5 21a7 7 0 0 1 14 0"/></svg></span>
@@ -33,31 +25,13 @@
     </div>
 </header>
 
-<aside class="app-sidebar" aria-label="Основная навигация">
-    <nav class="app-sidebar-nav">
-        <a class="app-sidebar-link" href="/">Календарь</a><a class="app-sidebar-link" href="/my-events">Мои мероприятия</a><a class="app-sidebar-link" href="/events/archive">Архив</a>
-        {{#if user.permissions.view_children}}<a class="app-sidebar-link" href="/child-events">Мероприятия ребёнка</a>{{/if}}
-        {{#if user.permissions.create_event}}<a class="app-sidebar-link" href="/events/create">Создать мероприятие</a>{{/if}}
-        {{#if canImportYearPlan}}<a class="app-sidebar-link" href="/events/import/year-plan">Импорт графика</a>{{/if}}
-        {{#if user.permissions.view_analytics}}<a class="app-sidebar-link" href="/analytics">Аналитика</a>{{/if}}
-        <a class="app-sidebar-link" href="/reviews">Отзывы</a>
-        {{#if user.permissions.moderate_event}}<a class="app-sidebar-link" href="/events/moderation">Модерация</a>{{/if}}
-        {{#if user.permissions.manage_settings}}<a class="app-sidebar-link" href="/admin/settings">Настройки</a>{{/if}}
-    </nav>
+<aside class="app-sidebar" aria-label="Рабочие разделы">
+    <nav class="app-sidebar-nav">{{> workspace-nav linkClass="app-sidebar-link"}}</nav>
 </aside>
 
 <dialog class="app-drawer" id="sidebar" aria-labelledby="sidebarLabel">
-    <div class="app-drawer-head"><strong id="sidebarLabel">Навигация</strong><button type="button" class="app-icon-button" data-drawer-close aria-label="Закрыть меню"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
-    <nav class="app-drawer-nav" aria-label="Мобильная навигация">
-        <a class="app-drawer-link" href="/">Календарь</a><a class="app-drawer-link" href="/my-events">Мои мероприятия</a><a class="app-drawer-link" href="/events/archive">Архив</a>
-        {{#if user.permissions.view_children}}<a class="app-drawer-link" href="/child-events">Мероприятия ребёнка</a>{{/if}}
-        {{#if user.permissions.create_event}}<a class="app-drawer-link" href="/events/create">Создать мероприятие</a>{{/if}}
-        {{#if canImportYearPlan}}<a class="app-drawer-link" href="/events/import/year-plan">Импорт графика</a>{{/if}}
-        {{#if user.permissions.view_analytics}}<a class="app-drawer-link" href="/analytics">Аналитика</a>{{/if}}
-        <a class="app-drawer-link" href="/reviews">Отзывы</a>
-        {{#if user.permissions.moderate_event}}<a class="app-drawer-link" href="/events/moderation">Модерация</a>{{/if}}
-        {{#if user.permissions.manage_settings}}<a class="app-drawer-link" href="/admin/settings">Настройки</a>{{/if}}
-    </nav>
+    <div class="app-drawer-head"><strong id="sidebarLabel">Рабочие разделы</strong><button type="button" class="app-icon-button" data-drawer-close aria-label="Закрыть меню"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
+    <nav class="app-drawer-nav" aria-label="Мобильная навигация">{{> workspace-nav linkClass="app-drawer-link"}}</nav>
     <a class="app-btn app-btn-secondary" href="/auth/logout">Выйти из системы</a>
 </dialog>
 {{else}}

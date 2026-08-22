@@ -2,26 +2,38 @@
     <div>
         <p class="app-page-kicker">Школьное пространство</p>
         <h1 class="app-page-title">Календарь мероприятий</h1>
-        <p class="app-page-summary">Единое расписание школьных инициатив, встреч и событий.</p>
+        <p class="app-page-summary" id="workspaceSummary">Все важные события и действия — в одном рабочем пространстве.</p>
     </div>
     <div class="app-actions-row">
-        {{#if user.permissions.create_event}}<a class="app-btn app-btn-primary" href="/events/create">Создать мероприятие</a>{{/if}}
-        {{#if user.permissions.moderate_event}}<a class="app-btn app-btn-secondary" href="/events/moderation">Открыть модерацию</a>{{/if}}
+        {{#if user.permissions.create_event}}<a class="app-btn app-btn-primary" href="/?compose=create">Создать мероприятие</a>{{/if}}
+        {{#if user.permissions.moderate_event}}<a class="app-btn app-btn-secondary" href="/?scope=moderation">На модерации <span class="app-counter" id="pendingBadge" hidden>0</span></a>{{/if}}
     </div>
+</section>
+
+<section class="app-workspace-views" aria-label="Быстрые представления">
+    <button class="app-view-chip" type="button" data-workspace-scope="all">Календарь</button>
+    <button class="app-view-chip" type="button" data-workspace-scope="mine">Моё</button>
+    {{#if user.permissions.view_children}}<button class="app-view-chip" type="button" data-workspace-scope="children">Дети</button>{{/if}}
+    <button class="app-view-chip" type="button" data-workspace-scope="archive">История</button>
+    <button class="app-view-chip" type="button" data-workspace-scope="reviews">Отзывы</button>
+    {{#if user.permissions.moderate_event}}<button class="app-view-chip" type="button" data-workspace-scope="moderation">Модерация</button>{{/if}}
 </section>
 
 <section class="app-stat-grid" aria-label="Сводная статистика">
-    <div class="app-stat"><span class="app-stat-label">Всего мероприятий</span><span class="app-stat-value" id="totalEvents">0</span></div>
+    <div class="app-stat"><span class="app-stat-label">Доступно событий</span><span class="app-stat-value" id="totalEvents">0</span></div>
     <div class="app-stat"><span class="app-stat-label">Опубликовано</span><span class="app-stat-value" id="approvedEvents">0</span></div>
-    <div class="app-stat"><span class="app-stat-label">На модерации</span><span class="app-stat-value" id="pendingEvents">0</span></div>
-    <div class="app-stat"><span class="app-stat-label">Моих участий</span><span class="app-stat-value" id="myParticipations">0</span></div>
+    <div class="app-stat"><span class="app-stat-label">Ожидают решения</span><span class="app-stat-value" id="pendingEvents">0</span></div>
+    <div class="app-stat"><span class="app-stat-label">В истории</span><span class="app-stat-value" id="archiveEvents">0</span></div>
 </section>
 
 <section class="app-surface app-filter-bar" aria-label="Фильтры календаря">
-    <label class="app-field"><span class="app-label">Поиск</span><input class="app-input" type="search" id="searchInput" placeholder="Название или место"></label>
-    <label class="app-field"><span class="app-label">Статус</span><select class="app-select" id="filterStatus"><option value="all">Все статусы</option><option value="APPROVED">Опубликованные</option><option value="WAITING">На модерации</option></select></label>
+    <label class="app-field"><span class="app-label">Поиск</span><input class="app-input" type="search" id="searchInput" placeholder="Название, место или организатор"></label>
+    <label class="app-field"><span class="app-label">Статус</span><select class="app-select" id="filterStatus"><option value="all">Все статусы</option><option value="APPROVED">Опубликованные</option><option value="WAITING_ADMIN">На модерации</option><option value="REJECTED">Отклонённые</option><option value="CANCELED">Отменённые</option><option value="COMPLETED">Завершённые</option></select></label>
     <label class="app-field"><span class="app-label">Тип</span><select class="app-select" id="filterType"><option value="all">Все типы</option>{{#each types}}<option value="{{id}}">{{name}}</option>{{/each}}</select></label>
     <div class="app-field"><span class="app-label">&nbsp;</span><button class="app-btn app-btn-secondary" type="button" id="resetFiltersBtn">Сбросить</button></div>
 </section>
 
 <section class="app-surface app-surface-pad" aria-label="Календарь"><div id="calendar"></div></section>
+<div class="app-toast-region" id="toastRegion" aria-live="polite" aria-atomic="true"></div>
+
+<script>window.workspaceInitialState = {{{json workspaceState}}};</script>
