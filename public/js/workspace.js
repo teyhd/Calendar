@@ -240,7 +240,60 @@
         return `<p class="app-page-summary">Справочники доступны для просмотра; управление учётными записями остаётся в SSO.</p><section class="app-stack app-section-gap">${list('Классы', data.classes)}${list('Кафедры', data.departments)}${list('Предметы', data.subjects)}${list('Типы мероприятий', data.event_types)}</section>`;
     }
     function importMarkup() {
-        return `<p class="app-page-summary">Снимок вкладки «26-27» проверяется до записи; все созданные карточки попадут на модерацию.</p><section class="app-form-section app-section-gap"><label class="app-field"><span class="app-label">CSV-снимок вкладки «26-27»</span><input class="app-input" id="yearPlanCsv" type="file" accept=".csv,text/csv"><span class="app-help">Имя файла должно содержать «26-27».</span></label><div class="app-actions-row"><button class="app-btn app-btn-primary" type="button" id="previewImport">Проверить снимок</button></div></section><section class="app-surface app-surface-pad app-section-gap" id="importPreview" hidden></section>`;
+        return `<p class="app-page-summary">Снимок вкладки «26-27» проверяется до записи; все созданные карточки попадут на модерацию.</p><section class="app-form-section app-section-gap"><label class="app-field"><span class="app-label">CSV-снимок вкладки «26-27»</span><input class="app-input" id="yearPlanCsv" type="file" accept=".csv,text/csv"><span class="app-help">Имя файла должно содержать «26-27».</span></label><div class="app-actions-row"><button class="app-btn app-btn-primary" type="button" id="previewImport">Проверить снимок</button></div></section><section class="app-surface app-surface-pad app-section-gap" id="importPreview" hidden></section>${titleNormalizationMarkup()}`;
+    }
+    function titleNormalizationMarkup() {
+        return `<section class="app-surface app-surface-pad app-section-gap"><h3 class="app-section-title">Корректировка названий импорта</h3><p class="app-help">Проверяется только уже импортированный снимок «26-27». Будут изменены лишь однозначные орфографические и регистровые правки; автор, аудитории, описания, статусы и согласования сохранятся.</p><div class="app-actions-row"><button class="app-btn app-btn-secondary" type="button" id="previewTitleNormalization">Проверить названия</button></div><div class="app-section-gap" id="titleNormalizationPreview" hidden></div></section>`;
+    }
+    function titleNormalizationList(items, render) {
+        if (!items.length) return '<p class="app-help">Нет записей.</p>';
+        return `<div class="app-table-wrap"><table class="app-table"><thead><tr><th>Дата</th><th>Было</th><th>Станет</th></tr></thead><tbody>${items.map(render).join('')}</tbody></table></div>`;
+    }
+    function initTitleNormalization() {
+        const trigger = document.getElementById('previewTitleNormalization');
+        const preview = document.getElementById('titleNormalizationPreview');
+        trigger?.addEventListener('click', async () => {
+            trigger.disabled = true;
+            trigger.textContent = 'Проверяем…';
+            try {
+                const data = await formRequest('/api/events/import/year-plan/title-normalization/preview', {});
+                preview.hidden = false;
+                if (data.alreadyApplied) {
+                    preview.innerHTML = '<div class="app-alert app-alert-success">Однозначные правки уже применены. Повторно ничего не изменено.</div>';
+                    return;
+                }
+                const corrections = titleNormalizationList(data.corrections, (item) => `<tr><td>${escapeHtml(item.date.split('-').reverse().join('.'))}</td><td>${escapeHtml(item.from)}</td><td>${escapeHtml(item.to)}</td></tr>`);
+                const review = data.editorialReview.length
+                    ? `<h4 class="app-section-title app-section-gap">Нужна редакторская проверка · ${Number(data.editorialReview.length)}</h4><div class="app-table-wrap"><table class="app-table"><thead><tr><th>Дата</th><th>Название</th><th>Почему не меняем автоматически</th></tr></thead><tbody>${data.editorialReview.map((item) => `<tr><td>${escapeHtml(item.date.split('-').reverse().join('.'))}</td><td>${escapeHtml(item.title)}</td><td>${escapeHtml(item.reason)}</td></tr>`).join('')}</tbody></table></div>`
+                    : '';
+                preview.innerHTML = `<h4 class="app-section-title">Однозначные исправления · ${Number(data.summary.corrections)}</h4><p class="app-help">Источник: ${escapeHtml(data.summary.source)}; SHA-256: ${escapeHtml(data.summary.sha256)}. Все ${Number(data.summary.importedEvents)} карточек по-прежнему имеют статус «${escapeHtml(data.summary.status)}».</p>${corrections}${review}<p class="app-alert app-alert-warning app-section-gap">Подтверждение применит только строки из таблицы выше одной транзакцией. Если хотя бы одна карточка изменилась после предпросмотра, весь пакет будет отменён.</p><div class="app-actions-row"><button class="app-btn app-btn-warning" type="button" id="commitTitleNormalization">Применить ${Number(data.summary.corrections)} правок</button></div>`;
+                document.getElementById('commitTitleNormalization')?.addEventListener('click', async () => {
+                    if (!window.confirm(`Применить ${Number(data.summary.corrections)} проверенных правок названий? Статусы и согласования останутся без изменений.`)) return;
+                    const button = document.getElementById('commitTitleNormalization');
+                    button.disabled = true;
+                    button.textContent = 'Применяем…';
+                    try {
+                        const result = await formRequest('/api/events/import/year-plan/title-normalization/commit', {
+                            expiresAt: data.preview.expiresAt,
+                            signature: data.preview.signature
+                        });
+                        const manifest = URL.createObjectURL(new Blob([JSON.stringify(result.manifest, null, 2)], { type: 'application/json' }));
+                        preview.innerHTML = `<div class="app-alert app-alert-success">Исправлено названий: ${Number(result.summary.corrections)}. Статус «${escapeHtml(result.summary.status)}» и согласования сохранены.</div><a class="app-btn app-btn-secondary" href="${manifest}" download="calendar-title-normalization-manifest.json">Скачать реестр правок</a>`;
+                        afterMutation('Названия импортированных мероприятий исправлены.', { scope: 'mine' });
+                    } catch (error) {
+                        button.disabled = false;
+                        button.textContent = `Применить ${Number(data.summary.corrections)} правок`;
+                        notify(error.message || 'Не удалось применить правки.', 'danger');
+                    }
+                });
+            } catch (error) {
+                preview.hidden = false;
+                preview.innerHTML = `<div class="app-alert app-alert-danger">${escapeHtml(error.message || 'Не удалось проверить названия.')}</div>`;
+            } finally {
+                trigger.disabled = false;
+                trigger.textContent = 'Проверить названия';
+            }
+        });
     }
     function initImport() {
         const input = document.getElementById('yearPlanCsv'); const preview = document.getElementById('importPreview'); let current = null;
@@ -262,6 +315,7 @@
                 });
             } catch (error) { preview.hidden = false; preview.innerHTML = `<div class="app-alert app-alert-danger">${escapeHtml(error.message || 'Не удалось проверить снимок.')}</div>`; }
         });
+        initTitleNormalization();
     }
     async function openPanel(panel, opener = document.activeElement) {
         const title = { notifications: 'Уведомления', analytics: 'Аналитика', settings: 'Справочники календаря', import: 'Импорт годового графика' }[panel];

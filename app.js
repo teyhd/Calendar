@@ -48,6 +48,60 @@ const YEAR_PLAN_IMPORT = Object.freeze({
     defaultEventType: 'Досуговое',
     previewTtlSeconds: 15 * 60
 });
+// A deliberately narrow, reviewable correction set for the one imported 26-27 snapshot.
+// It is not a generic "title case" operation: abbreviations and uncertain source text stay intact.
+export const YEAR_PLAN_TITLE_NORMALIZATION = Object.freeze({
+    sourceSnapshotHash: '0e6fdab0be0ccaf57d8f86fb4dc843e8039947c93067fef177cf7980c3df3011',
+    expectedEventCount: 136,
+    corrections: Object.freeze([
+        { from: '1 лис по классам', to: '1 Лис по классам', expected: 1 },
+        { from: '3 лис по классам', to: '3 Лис по классам', expected: 1 },
+        { from: '4 лис по классам', to: '4 Лис по классам', expected: 1 },
+        { from: '5 лис по классам', to: '5 Лис по классам', expected: 1 },
+        { from: '6 лис по классам', to: '6 Лис по классам', expected: 1 },
+        { from: '7 лис по классам', to: '7 Лис по классам', expected: 1 },
+        { from: '8 лис по классам', to: '8 Лис по классам', expected: 1 },
+        { from: '9 лис по классам', to: '9 Лис по классам', expected: 1 },
+        { from: '10 лис по классам', to: '10 Лис по классам', expected: 1 },
+        { from: '11 лис по классам', to: '11 Лис по классам', expected: 1 },
+        { from: '12 лис по классам', to: '12 Лис по классам', expected: 1 },
+        { from: '13 лис по классам', to: '13 Лис по классам', expected: 1 },
+        { from: '14 лис по классам', to: '14 Лис по классам', expected: 1 },
+        { from: '15 лис по классам', to: '15 Лис по классам', expected: 1 },
+        { from: '16 лис по классам', to: '16 Лис по классам', expected: 1 },
+        { from: '17 лис по классам', to: '17 Лис по классам', expected: 1 },
+        { from: 'день полетов в аэротрубе', to: 'День полётов в аэротрубе', expected: 2 },
+        { from: 'без парламента', to: 'Без парламента', expected: 1 },
+        { from: 'осенний бал (кафедра естест.наук и английского)', to: 'Осенний бал (кафедра естественных наук и английского языка)', expected: 1 },
+        { from: 'творческая встреча с детским писателем', to: 'Творческая встреча с детским писателем', expected: 1 },
+        { from: 'литературный вечер', to: 'Литературный вечер', expected: 1 },
+        { from: 'литературный выезд?', to: 'Литературный выезд?', expected: 1 },
+        { from: 'каникулы', to: 'Каникулы', expected: 23 },
+        { from: 'день народного единства/пич 1', to: 'День народного единства / ПИЧ 1', expected: 1 },
+        { from: 'День народного единства/пич1', to: 'День народного единства / ПИЧ 1', expected: 1 },
+        { from: 'осенний шахматный турнир', to: 'Осенний шахматный турнир', expected: 2 },
+        { from: 'День любителей поспать - день пижам', to: 'День любителей поспать — день пижам', expected: 1 },
+        { from: 'приглашенный гость?', to: 'Приглашённый гость?', expected: 1 },
+        { from: 'приглашенный гость каф анг: пилот гражланской авиации', to: 'Приглашённый гость кафедры английского языка: пилот гражданской авиации', expected: 1 },
+        { from: 'викторина  по великим ученым', to: 'Викторина по великим учёным', expected: 1 },
+        { from: 'международный день женщин и девочек в науке', to: 'Международный день женщин и девочек в науке', expected: 1 },
+        { from: 'весенний шахматный турнир', to: 'Весенний шахматный турнир', expected: 2 },
+        { from: 'меропритие от кафедры математики для 7,8,10 кл геометрия Петербурга', to: 'Мероприятие от кафедры математики для 7, 8 и 10 классов: «Геометрия Петербурга»', expected: 1 },
+        { from: 'мероприятие с НА и НН', to: 'Мероприятие с НА и НН', expected: 1 }
+    ]),
+    editorialReview: Object.freeze([
+        { title: '9-11 профориентация приглашенный выпускник ВШЭ кафедра истории', reason: 'Неясны аудитория и роль кафедры.' },
+        { title: 'Рождество ????', reason: 'В исходнике отсутствует уточнение мероприятия.' },
+        { title: 'Праздник в школе у началки точно спектакль', reason: 'Нужно подтвердить фактический формат мероприятия.' },
+        { title: '??? сотрудник ИТМО или международный Яндекс приглашенный гость от каф мат', reason: 'В исходнике не определён приглашённый гость.' },
+        { title: 'Чемпионат ТЭО по 8 кл /9 кл Лис к 10-11 на встречу с приглашенным гостем', reason: 'Нужно подтвердить распределение по классам.' },
+        { title: 'Гос.выходной', reason: 'Нужно подтвердить полное наименование.' },
+        { title: 'День Числа Пи (кафедра математики)', reason: 'Стилистика названия может быть намеренной.' },
+        { title: '9-11 уроки', reason: 'Нужно подтвердить, что это именно уроки для 9–11 классов.' },
+        { title: 'ДР школы', reason: 'В исходнике используется внутренняя аббревиатура.' },
+        { title: 'Праздник ПЗ', reason: 'В исходнике используется внутренняя аббревиатура.' }
+    ])
+});
 const YEAR_PLAN_SOURCE_COLUMNS = Object.freeze([
     { index: 2, label: 'Начальная школа', grades: [1, 2, 3, 4] },
     { index: 3, label: '5-6 классы', grades: [5, 6] },
@@ -256,6 +310,10 @@ function sourceDescription({ hash, sourceRows, sourceColumns, comment, note }) {
     const provenance = `Импорт: ${YEAR_PLAN_IMPORT.sourceName}/${YEAR_PLAN_IMPORT.sheetName}; SHA-256=${hash}; строка CSV ${sourceRows.join(', ')}; колонки ${sourceColumns.join(', ')}`;
     if (note) return `${provenance}\nСлужебная заметка: ${note}`;
     return comment ? `${provenance}\nКомментарий: ${comment}` : provenance;
+}
+
+function yearPlanImportMarker(snapshotHash) {
+    return `Импорт: ${YEAR_PLAN_IMPORT.sourceName}/${YEAR_PLAN_IMPORT.sheetName}; SHA-256=${snapshotHash};`;
 }
 
 export function buildYearPlanImportRecords(csv, fileName = '26-27.csv') {
@@ -693,7 +751,7 @@ async function prepareYearPlanImport(csv, fileName, actor) {
         }, validationContext);
         preparedRecords.push({ ...record, input, audience });
     }
-    const marker = `Импорт: ${YEAR_PLAN_IMPORT.sourceName}/${YEAR_PLAN_IMPORT.sheetName}; SHA-256=${snapshotHash};`;
+    const marker = yearPlanImportMarker(snapshotHash);
     const [existing] = await pool.query('SELECT id FROM events WHERE description LIKE ? LIMIT 1', [`${marker}%`]);
     if (existing.length) throw importError('Этот CSV-снимок уже был импортирован. Повторный запуск не создаёт дубли.', 409);
     return { snapshotHash, marker, records: preparedRecords, admins };
@@ -708,6 +766,131 @@ function yearPlanImportSummary(prepared) {
         sourceRows: [...new Set(prepared.records.flatMap((record) => record.sourceRows))].length,
         startsAt: YEAR_PLAN_IMPORT.startDate,
         defaultTime: '09:00–18:00'
+    };
+}
+
+function titleNormalizationSignature(actorId, previewHash, expiresAt) {
+    const secret = process.env.AUTH_SESSION_SECRET || process.env.JWT_SECRET;
+    if (!secret) throw importError('Не настроен секрет для подтверждения правки названий.', 503);
+    return crypto.createHmac('sha256', secret)
+        .update(`year-plan-title-normalization:v1:${actorId}:${previewHash}:${expiresAt}`)
+        .digest('base64url');
+}
+
+function createTitleNormalizationPreviewToken(actorId, previewHash) {
+    const expiresAt = Math.floor(Date.now() / 1000) + YEAR_PLAN_IMPORT.previewTtlSeconds;
+    return { expiresAt, signature: titleNormalizationSignature(actorId, previewHash, expiresAt) };
+}
+
+function verifyTitleNormalizationPreviewToken(actorId, previewHash, expiresAt, signature) {
+    if (!Number.isInteger(Number(expiresAt)) || Number(expiresAt) < Math.floor(Date.now() / 1000)) {
+        throw importError('Срок действия предварительного просмотра истёк. Проверьте список названий заново.');
+    }
+    const expected = titleNormalizationSignature(actorId, previewHash, Number(expiresAt));
+    const actual = String(signature || '');
+    if (!actual || actual.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(actual), Buffer.from(expected))) {
+        throw importError('Подтверждение не соответствует проверенному списку правок.', 403);
+    }
+}
+
+export function buildYearPlanTitleNormalization(events) {
+    const changeBySourceTitle = new Map(YEAR_PLAN_TITLE_NORMALIZATION.corrections.map((item) => [item.from, item]));
+    const sourceCounts = new Map();
+    for (const event of events) {
+        if (changeBySourceTitle.has(event.title)) {
+            sourceCounts.set(event.title, Number(sourceCounts.get(event.title) || 0) + 1);
+        }
+    }
+    const foundSourceCount = [...sourceCounts.values()].reduce((total, count) => total + count, 0);
+    if (foundSourceCount === 0) {
+        return { alreadyApplied: true, corrections: [], editorialReview: [] };
+    }
+
+    const mismatches = YEAR_PLAN_TITLE_NORMALIZATION.corrections
+        .filter((item) => Number(sourceCounts.get(item.from) || 0) !== item.expected)
+        .map((item) => `«${item.from}»: ожидалось ${item.expected}, найдено ${Number(sourceCounts.get(item.from) || 0)}`);
+    if (mismatches.length) {
+        throw importError(`Набор исходных названий изменился; правка остановлена: ${mismatches.join('; ')}.`, 409);
+    }
+
+    const corrections = events
+        .map((event) => {
+            const change = changeBySourceTitle.get(event.title);
+            return change ? {
+                id: Number(event.id),
+                date: String(event.source_date || event.start_datetime || '').slice(0, 10),
+                from: change.from,
+                to: change.to,
+                audienceType: event.target_audience_type
+            } : null;
+        })
+        .filter(Boolean)
+        .sort((left, right) => left.date.localeCompare(right.date) || left.id - right.id);
+
+    for (const correction of corrections) {
+        if (!correction.to || correction.to.length > 100) {
+            throw importError(`Исправленное название мероприятия #${correction.id} не проходит ограничение в 100 символов.`);
+        }
+    }
+
+    const collisionKeys = new Map();
+    for (const event of events) {
+        const correction = changeBySourceTitle.get(event.title);
+        const effectiveTitle = correction ? correction.to : event.title;
+        const key = [event.source_date || event.start_datetime, event.target_audience_type, event.target_audience_id, effectiveTitle].join('\u0000');
+        const previous = collisionKeys.get(key);
+        if (previous) {
+            throw importError(`Правка создаёт дубликат названия для одной даты и аудитории (карточки #${previous.id} и #${event.id}).`, 409);
+        }
+        collisionKeys.set(key, event);
+    }
+
+    const reviewReasonByTitle = new Map(YEAR_PLAN_TITLE_NORMALIZATION.editorialReview.map((item) => [item.title, item.reason]));
+    const editorialReview = events
+        .filter((event) => reviewReasonByTitle.has(event.title))
+        .map((event) => ({
+            id: Number(event.id),
+            date: String(event.source_date || event.start_datetime || '').slice(0, 10),
+            title: event.title,
+            reason: reviewReasonByTitle.get(event.title)
+        }))
+        .sort((left, right) => left.date.localeCompare(right.date) || left.id - right.id);
+    return { alreadyApplied: false, corrections, editorialReview };
+}
+
+function titleNormalizationPreviewHash(marker, normalization) {
+    const payload = JSON.stringify({ marker, corrections: normalization.corrections });
+    return crypto.createHash('sha256').update(payload, 'utf8').digest('hex');
+}
+
+async function prepareYearPlanTitleNormalization(actor) {
+    assertYearPlanImportActor(actor);
+    const marker = yearPlanImportMarker(YEAR_PLAN_TITLE_NORMALIZATION.sourceSnapshotHash);
+    const [[events], admins] = await Promise.all([
+        pool.query(`
+            SELECT id, title, description, status, created_by, target_audience_type, target_audience_id,
+                   DATE_FORMAT(start_datetime, '%Y-%m-%d') AS source_date
+              FROM events
+             WHERE description LIKE ?
+             ORDER BY start_datetime ASC, id ASC
+        `, [`${marker}%`]),
+        getCalendarAdmins(),
+        assertActiveUsers([actor.id])
+    ]);
+    if (!admins.length) throw importError('В SSO нет назначенных администраторов Calendar.');
+    if (events.length !== YEAR_PLAN_TITLE_NORMALIZATION.expectedEventCount) {
+        throw importError(`Для снимка 26-27 ожидалось ${YEAR_PLAN_TITLE_NORMALIZATION.expectedEventCount} карточек, найдено ${events.length}. Правка остановлена.`, 409);
+    }
+    const changedEvent = events.find((event) => !sameUserId(event.created_by, actor.id) || event.status !== 'WAITING_ADMIN');
+    if (changedEvent) {
+        throw importError(`Карточка #${changedEvent.id} больше не принадлежит Марине или уже не ожидает модерации. Правка остановлена.`, 409);
+    }
+    const normalization = buildYearPlanTitleNormalization(events);
+    return {
+        marker,
+        admins,
+        normalization,
+        previewHash: normalization.alreadyApplied ? null : titleNormalizationPreviewHash(marker, normalization)
     };
 }
 
@@ -852,6 +1035,86 @@ app.post('/api/events/import/year-plan/commit', requireApiAuth, requirePermissio
         }
         mlog('[ERROR]', 'Импорт годового графика', error.message);
         apiError(res, error.status || 400, error.message || 'Не удалось импортировать CSV-снимок');
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.post('/api/events/import/year-plan/title-normalization/preview', requireApiAuth, requirePermission('create_event'), async (req, res) => {
+    try {
+        const prepared = await prepareYearPlanTitleNormalization(user(req));
+        const summary = {
+            source: `${YEAR_PLAN_IMPORT.sourceName}/${YEAR_PLAN_IMPORT.sheetName}`,
+            sha256: YEAR_PLAN_TITLE_NORMALIZATION.sourceSnapshotHash,
+            importedEvents: YEAR_PLAN_TITLE_NORMALIZATION.expectedEventCount,
+            corrections: prepared.normalization.corrections.length,
+            editorialReview: prepared.normalization.editorialReview.length,
+            status: 'WAITING_ADMIN'
+        };
+        res.json({
+            success: true,
+            alreadyApplied: prepared.normalization.alreadyApplied,
+            summary,
+            preview: prepared.normalization.alreadyApplied ? null : createTitleNormalizationPreviewToken(user(req).id, prepared.previewHash),
+            corrections: prepared.normalization.corrections,
+            editorialReview: prepared.normalization.editorialReview
+        });
+    } catch (error) {
+        mlog('[ERROR]', 'Предпросмотр правки названий годового графика', error.message);
+        apiError(res, error.status || 400, error.message || 'Не удалось проверить названия мероприятий');
+    }
+});
+
+app.post('/api/events/import/year-plan/title-normalization/commit', requireApiAuth, requirePermission('create_event'), async (req, res) => {
+    let connection;
+    try {
+        const prepared = await prepareYearPlanTitleNormalization(user(req));
+        if (prepared.normalization.alreadyApplied) {
+            throw importError('Однозначные правки названий уже применены. Новые записи не созданы.', 409);
+        }
+        verifyTitleNormalizationPreviewToken(user(req).id, prepared.previewHash, req.body?.expiresAt, req.body?.signature);
+        connection = await pool.getConnection();
+        await connection.beginTransaction();
+        for (const correction of prepared.normalization.corrections) {
+            const [result] = await connection.query(`
+                UPDATE events
+                   SET title = ?
+                 WHERE id = ?
+                   AND title = ?
+                   AND created_by = ?
+                   AND status = 'WAITING_ADMIN'
+                   AND description LIKE ?
+            `, [correction.to, correction.id, correction.from, user(req).id, `${prepared.marker}%`]);
+            if (result.affectedRows !== 1) {
+                throw importError(`Карточка #${correction.id} изменилась после предпросмотра. Правка отменена целиком.`, 409);
+            }
+        }
+        await connection.commit();
+        connection.release();
+        connection = null;
+        const notificationText = `Уточнены названия ${prepared.normalization.corrections.length} мероприятий из графика «${YEAR_PLAN_IMPORT.sheetName}»; статусы и согласования сохранены.`;
+        await Promise.all(prepared.admins.map((admin) => createNotification(admin.id, null, 'year_plan_title_normalization', notificationText)));
+        res.json({
+            success: true,
+            summary: {
+                corrections: prepared.normalization.corrections.length,
+                editorialReview: prepared.normalization.editorialReview.length,
+                status: 'WAITING_ADMIN'
+            },
+            manifest: {
+                source: `${YEAR_PLAN_IMPORT.sourceName}/${YEAR_PLAN_IMPORT.sheetName}`,
+                sha256: YEAR_PLAN_TITLE_NORMALIZATION.sourceSnapshotHash,
+                correctedAt: new Date().toISOString(),
+                correctedBy: { id: Number(user(req).id), name: user(req).name },
+                records: prepared.normalization.corrections
+            }
+        });
+    } catch (error) {
+        if (connection) {
+            try { await connection.rollback(); } catch (rollbackError) { mlog('[ERROR]', 'Откат правки названий годового графика', rollbackError.message); }
+        }
+        mlog('[ERROR]', 'Правка названий годового графика', error.message);
+        apiError(res, error.status || 400, error.message || 'Не удалось применить правку названий');
     } finally {
         if (connection) connection.release();
     }
