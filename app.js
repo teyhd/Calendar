@@ -127,9 +127,82 @@ function successResponse(req, res, payload = {}) {
     return wantsJSON(req) ? res.json({ success: true, ...payload }) : null;
 }
 
-function workspaceURL(params = {}) {
+const workspaceViews = new Set(['calendar', 'mine', 'children', 'moderation', 'history', 'reviews', 'analytics', 'import', 'settings', 'notifications']);
+const workspaceViewAliases = Object.freeze({
+    all: 'calendar',
+    archive: 'history',
+    calendar: 'calendar',
+    mine: 'mine',
+    children: 'children',
+    moderation: 'moderation',
+    history: 'history',
+    reviews: 'reviews',
+    analytics: 'analytics',
+    import: 'import',
+    settings: 'settings',
+    notifications: 'notifications'
+});
+
+export function workspaceScopeForView(view) {
+    return Object.freeze({ history: 'archive', calendar: 'all' })[view] || view || 'all';
+}
+
+export function normalizeWorkspaceView(value, actor = null) {
+    const requested = workspaceViewAliases[String(value || '').toLowerCase()] || 'calendar';
+    if (!workspaceViews.has(requested)) return 'calendar';
+    if (!actor) return requested;
+    if (requested === 'children' && !actor.permissions?.view_children) return 'calendar';
+    if (requested === 'moderation' && !actor.permissions?.moderate_event) return 'calendar';
+    if (requested === 'analytics' && !actor.permissions?.view_analytics) return 'calendar';
+    if (requested === 'settings' && !actor.permissions?.manage_settings) return 'calendar';
+    if (requested === 'import' && !canImportYearPlan(actor)) return 'calendar';
+    return requested;
+}
+
+export function workspaceDefaultView(actor, pendingCount = 0) {
+    if (actor?.permissions?.moderate_event && Number(pendingCount) > 0) return 'moderation';
+    if (actor?.permissions?.view_children) return 'children';
+    if (actor?.permissions?.create_event) return 'mine';
+    return 'calendar';
+}
+
+export function workspaceNavigation(actor, { pendingCount = 0, unreadCount = 0 } = {}) {
+    const item = (view, label, icon, count = 0) => ({
+        view,
+        label,
+        icon,
+        count: Number(count) || 0,
+        href: workspaceURL({ view })
+    });
+    const navigation = [item('calendar', 'Календарь', 'calendar')];
+    if (actor?.permissions?.view_children) navigation.push(item('children', 'Дети', 'users'));
+    else if (actor?.permissions?.create_event) navigation.push(item('mine', 'Мои события', 'bookmark'));
+    if (actor?.permissions?.moderate_event) navigation.push(item('moderation', 'Модерация', 'shield', pendingCount));
+    navigation.push(item('history', 'История', 'archive'));
+    navigation.push(item('reviews', 'Отзывы', 'star'));
+    if (actor?.permissions?.view_analytics) navigation.push(item('analytics', 'Аналитика', 'chart'));
+    if (canImportYearPlan(actor)) navigation.push(item('import', 'Импорт плана', 'upload'));
+    if (actor?.permissions?.manage_settings) navigation.push(item('settings', 'Настройки', 'settings'));
+    navigation.push(item('notifications', 'Уведомления', 'bell', unreadCount));
+    return navigation;
+}
+
+function workspaceViewFromQuery(query, actor, pendingCount = 0) {
+    const explicit = query.view || query.scope || query.panel;
+    return explicit ? normalizeWorkspaceView(explicit, actor) : workspaceDefaultView(actor, pendingCount);
+}
+
+export function workspaceURL(params = {}) {
+    const canonical = { ...params };
+    if (!canonical.view && (canonical.scope || canonical.panel)) {
+        const legacy = canonical.scope || canonical.panel;
+        canonical.view = workspaceViewAliases[String(legacy).toLowerCase()] || undefined;
+        delete canonical.scope;
+        delete canonical.panel;
+    }
+    if (canonical.view === 'calendar') delete canonical.view;
     const search = new URLSearchParams();
-    for (const [key, value] of Object.entries(params)) {
+    for (const [key, value] of Object.entries(canonical)) {
         if (value != null && value !== '' && value !== 'all') search.set(key, String(value));
     }
     const suffix = search.toString();
@@ -470,8 +543,9 @@ async function participantsByEvent(eventIds) {
     return result;
 }
 
-async function workspaceEventsFor(actor, query = {}) {
-    const scope = String(query.scope || 'all');
+export async function workspaceEventsFor(actor, query = {}) {
+    const view = normalizeWorkspaceView(query.view || query.scope || 'calendar', actor);
+    const scope = workspaceScopeForView(view);
     const needsArchive = ['archive', 'reviews'].includes(scope) || ['REJECTED', 'CANCELED', 'COMPLETED'].includes(normalizedEventStatus(query.status));
     let events = await visibleEventsFor(actor, { includeArchived: needsArchive });
 
@@ -506,13 +580,44 @@ async function workspaceEventsFor(actor, query = {}) {
     const status = normalizedEventStatus(query.status);
     const typeId = Number(query.type);
     const search = String(query.search || '').trim().toLocaleLowerCase('ru-RU');
-    return events.filter((event) => {
+    const from = /^\d{4}-\d{2}-\d{2}$/.test(String(query.from || '')) ? `${query.from}T00:00:00` : null;
+    const to = /^\d{4}-\d{2}-\d{2}$/.test(String(query.to || '')) ? `${query.to}T23:59:59` : null;
+    const filtered = events.filter((event) => {
         if (status !== 'all' && event.status !== status) return false;
         if (Number.isSafeInteger(typeId) && typeId > 0 && Number(event.event_type_id) !== typeId) return false;
+        const start = String(event.start_datetime || '').replace(' ', 'T');
+        if (from && start < from) return false;
+        if (to && start > to) return false;
         if (search) return [event.title, event.description, event.location, event.type_name, event.creator_name, event.audience_name]
             .some((value) => String(value || '').toLocaleLowerCase('ru-RU').includes(search));
         return true;
     });
+    const sort = String(query.sort || 'start_asc');
+    return filtered.sort((left, right) => {
+        if (sort === 'start_desc') return String(right.start_datetime).localeCompare(String(left.start_datetime));
+        if (sort === 'title') return String(left.title).localeCompare(String(right.title), 'ru');
+        return String(left.start_datetime).localeCompare(String(right.start_datetime));
+    });
+}
+
+export async function workspaceEventPageFor(actor, query = {}) {
+    const items = await workspaceEventsFor(actor, query);
+    const pageSize = Math.min(Math.max(Number(query.page_size) || 24, 1), 100);
+    const page = Math.max(Number(query.page) || 1, 1);
+    const start = (page - 1) * pageSize;
+    const counts = items.reduce((result, event) => {
+        result.all += 1;
+        result[event.status] = (result[event.status] || 0) + 1;
+        return result;
+    }, { all: 0 });
+    return {
+        items: items.slice(start, start + pageSize),
+        total: items.length,
+        page,
+        page_size: pageSize,
+        counts,
+        range: { from: String(query.from || ''), to: String(query.to || '') }
+    };
 }
 
 async function createNotification(userId, eventId, type, message) {
@@ -753,13 +858,39 @@ if (process.env.NODE_ENV !== 'test') {
 
 app.get('/', requirePageAuth, async (req, res) => {
     try {
-        const [types] = await pool.query('SELECT * FROM event_types ORDER BY name');
-        res.render('calendar/index', { title: 'Календарь мероприятий', types, workspaceState: {
-            scope: String(req.query.scope || 'all'),
-            panel: String(req.query.panel || ''),
+        const actor = user(req);
+        const [[types], [pendingRows]] = await Promise.all([
+            pool.query('SELECT * FROM event_types ORDER BY name'),
+            actor.permissions?.moderate_event
+                ? pool.query("SELECT COUNT(*) AS count FROM events WHERE status = 'WAITING_ADMIN'")
+                : Promise.resolve([[{ count: 0 }]])
+        ]);
+        const pendingCount = Number(pendingRows[0]?.count || 0);
+        const view = workspaceViewFromQuery(req.query, actor, pendingCount);
+        const navigation = workspaceNavigation(actor, { pendingCount, unreadCount: res.locals.unreadCount });
+        const mobileNavigation = [
+            navigation.find((item) => item.view === 'calendar'),
+            navigation.find((item) => item.view === 'moderation') || navigation.find((item) => item.view === 'children') || navigation.find((item) => item.view === 'mine'),
+            navigation.find((item) => item.view === 'notifications')
+        ].filter(Boolean).map((item) => ({ ...item, isActive: item.view === view }));
+        res.render('calendar/index', {
+            title: 'Календарь мероприятий',
+            types,
+            workspaceNavigation: navigation.map((item) => ({ ...item, isActive: item.view === view })),
+            workspaceMobileNavigation: mobileNavigation,
+            workspaceState: {
+            view,
+            scope: workspaceScopeForView(view),
+            panel: '',
             event: Number(req.query.event) || null,
-            compose: String(req.query.compose || '')
-        } });
+            compose: String(req.query.compose || ''),
+            search: String(req.query.search || ''),
+            status: normalizedEventStatus(req.query.status),
+            type: Number(req.query.type) || null,
+            from: String(req.query.from || ''),
+            to: String(req.query.to || '')
+        }
+        });
     } catch (error) {
         mlog('[ERROR]', 'Загрузка календаря', error.code || error.message);
         pageError(res, 500, 'Ошибка сервера');
@@ -1099,30 +1230,46 @@ app.get('/api/events', requireApiAuth, async (req, res) => {
     catch (error) { mlog('[ERROR]', 'API событий', error.message); apiError(res, 500, 'Ошибка сервера'); }
 });
 
+app.get('/api/workspace/events', requireApiAuth, async (req, res) => {
+    try { res.json(await workspaceEventPageFor(user(req), req.query)); }
+    catch (error) { mlog('[ERROR]', 'API представления событий', error.message); apiError(res, 500, 'Не удалось загрузить события'); }
+});
+
 app.get('/api/workspace', requireApiAuth, async (req, res) => {
     try {
         const actor = user(req);
-        const [types, allEvents] = await Promise.all([
+        const [types, allEvents, unreadRows] = await Promise.all([
             pool.query('SELECT id, name FROM event_types ORDER BY name').then(([rows]) => rows),
-            visibleEventsFor(actor, { includeArchived: true })
+            visibleEventsFor(actor, { includeArchived: true }),
+            pool.query('SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND is_read = 0', [actor.id]).then(([rows]) => rows)
         ]);
         const [children, teachers] = await Promise.all([
             actor.type === 6 ? getChildrenForParent(actor.id) : [],
             actor.type === 5 ? listActiveUsers([2, 3, 4]) : []
         ]);
+        const counts = {
+            all: allEvents.length,
+            approved: allEvents.filter((event) => event.status === 'APPROVED').length,
+            pending: allEvents.filter((event) => event.status === 'WAITING_ADMIN').length,
+            archive: allEvents.filter((event) => archivedEventStatuses.has(event.status)).length,
+            reviews: allEvents.filter((event) => event.review_text).length
+        };
+        const unreadCount = Number(unreadRows[0]?.count || 0);
         res.json({
             user: { id: actor.id, name: actor.name, type: actor.type, role_name: actor.role_name, permissions: actor.permissions },
             types,
             children: children.map((child) => ({ id: child.id, name: child.name, class_name: child.kaf_name || '' })),
             teachers: teachers.map((teacher) => ({ id: teacher.id, name: teacher.name })),
             can_import_year_plan: canImportYearPlan(actor),
-            counts: {
-                all: allEvents.length,
-                approved: allEvents.filter((event) => event.status === 'APPROVED').length,
-                pending: allEvents.filter((event) => event.status === 'WAITING_ADMIN').length,
-                archive: allEvents.filter((event) => archivedEventStatuses.has(event.status)).length,
-                reviews: allEvents.filter((event) => event.review_text).length
-            }
+            default_view: workspaceDefaultView(actor, counts.pending),
+            navigation: workspaceNavigation(actor, { pendingCount: counts.pending, unreadCount }),
+            unread_count: unreadCount,
+            contextual_counts: {
+                visible: counts.all,
+                upcoming: allEvents.filter((event) => new Date(event.start_datetime).getTime() >= Date.now() && event.status === 'APPROVED').length,
+                pending: counts.pending
+            },
+            counts
         });
     } catch (error) { apiError(res, 500, 'Не удалось загрузить рабочее пространство'); }
 });
@@ -1369,4 +1516,4 @@ if (process.env.NODE_ENV !== 'test') {
     app.listen(listenOptions, () => mlog(`Calendar started on http://${listenOptions.host || 'localhost'}:${PORT}`));
 }
 
-export { app, parseCsvSnapshot, sourceDateToIso, YEAR_PLAN_IMPORT, normalizedEventStatus, workspaceURL };
+export { app, parseCsvSnapshot, sourceDateToIso, YEAR_PLAN_IMPORT, normalizedEventStatus };

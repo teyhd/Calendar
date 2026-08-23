@@ -172,12 +172,10 @@
         }
     };
 
-    document.addEventListener('DOMContentLoaded', () => {
-        const calendarElement = document.getElementById('calendar');
-        if (!calendarElement || !window.FullCalendar) return;
+    function mountCalendar(calendarElement, options = {}) {
+        if (!calendarElement || !window.FullCalendar) return null;
         window.currentUserId = document.querySelector('meta[name="user-id"]')?.content || 0;
         window.currentUserRole = document.querySelector('meta[name="user-role"]')?.content || 0;
-        window.workspaceScope = window.workspaceInitialState?.scope || 'all';
         const compactCalendar = window.matchMedia('(max-width: 820px)');
         const calendar = new FullCalendar.Calendar(calendarElement, {
             initialView: compactCalendar.matches ? 'listWeek' : 'dayGridMonth', locale: 'ru', height: 'auto',
@@ -185,15 +183,25 @@
             buttonText: { prev: 'Назад', next: 'Вперёд', today: 'Сегодня', month: 'Месяц', week: 'Неделя', list: 'Список' },
             events(fetchInfo, successCallback, failureCallback) {
                 const params = new URLSearchParams({
-                    scope: window.workspaceScope || 'all',
-                    search: document.getElementById('searchInput')?.value || '',
-                    status: document.getElementById('filterStatus')?.value || 'all',
-                    type: document.getElementById('filterType')?.value || 'all'
+                    view: options.view || 'calendar',
+                    search: options.filters?.search || '',
+                    status: options.filters?.status || 'all',
+                    type: options.filters?.type || 'all',
+                    from: fetchInfo.startStr.slice(0, 10),
+                    to: fetchInfo.endStr.slice(0, 10)
                 });
-                fetchJSON(`/api/events?${params}`)
+                fetchJSON(`/api/workspace/events?${params}`)
                     .then((events) => {
-                        successCallback(events.map((item) => ({ id: item.id, title: window.workspaceScope === 'children' && item.child_name ? `${item.title} · ${item.child_name}` : item.title, start: item.start_datetime, end: item.end_datetime, extendedProps: { status: item.status } })));
-                        window.loadStats();
+                        const items = events.items || events;
+                        successCallback(items.map((item) => ({
+                            id: item.id,
+                            title: options.view === 'children' && item.child_name ? `${item.title} · ${item.child_name}` : item.title,
+                            start: item.start_datetime,
+                            end: item.end_datetime,
+                            classNames: [`app-calendar-event--${(item.status || 'DRAFT').toLowerCase()}`],
+                            extendedProps: { status: item.status }
+                        })));
+                        options.onEvents?.(items);
                     })
                     .catch((error) => { console.error('Не удалось загрузить календарь:', error); failureCallback(error); });
             },
@@ -203,12 +211,7 @@
         });
         calendar.render();
         window.calendar = calendar;
-        ['searchInput', 'filterStatus', 'filterType'].forEach((id) => document.getElementById(id)?.addEventListener(id === 'searchInput' ? 'input' : 'change', () => calendar.refetchEvents()));
-        document.getElementById('resetFiltersBtn')?.addEventListener('click', () => {
-            ['searchInput', 'filterStatus', 'filterType'].forEach((id) => { const element = document.getElementById(id); if (element) element.value = 'all'; });
-            const search = document.getElementById('searchInput'); if (search) search.value = '';
-            calendar.refetchEvents();
-        });
-        window.loadStats();
-    });
+        return calendar;
+    }
+    window.calendarUI.mountCalendar = mountCalendar;
 })();

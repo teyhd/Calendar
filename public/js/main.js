@@ -3,7 +3,12 @@
     function openDialog(id, opener = document.activeElement) {
         const dialog = dialogById(id);
         if (!dialog || typeof dialog.showModal !== 'function') return;
-        if (!dialog.open) { dialog._appOpener = opener instanceof HTMLElement ? opener : null; dialog.showModal(); }
+        if (!dialog.open) {
+            dialog._appOpener = opener instanceof HTMLElement ? opener : null;
+            dialog.showModal();
+            const focusTarget = dialog.querySelector('[autofocus], input:not([type="hidden"]), textarea, button');
+            setTimeout(() => focusTarget?.focus(), 0);
+        }
     }
     function closeDialog(id) { if (dialogById(id)?.open) dialogById(id).close(); }
     function closeAllPopovers(exceptId = null) {
@@ -21,7 +26,8 @@
     function notify(message, tone = 'success') { window.workspace?.notify?.(message, tone); }
     function refreshAfterAction(message) {
         closeDialog('reasonModal'); closeDialog('eventModal');
-        window.calendar?.refetchEvents(); window.loadStats?.();
+        window.calendar?.refetchEvents();
+        window.workspace?.refreshBootstrap?.().then(() => window.workspace?.renderCurrent?.());
         notify(message);
     }
 
@@ -81,6 +87,7 @@
         document.getElementById('reasonModalLabel').textContent = titles[action] || 'Укажите причину';
         const submit = document.getElementById('submitReasonBtn');
         submit.textContent = action === 'delete' ? 'Удалить' : action === 'cancel_registration' ? 'Отменить запись' : action === 'cancel' ? 'Отменить' : 'Отклонить';
+        closeDialog('eventModal');
         openDialog('reasonModal');
         setTimeout(() => document.getElementById('reasonText')?.focus(), 0);
     };
@@ -88,6 +95,7 @@
     window.openReviewModal = function openReviewModal(eventId, currentText = '') {
         document.getElementById('reviewEventId').value = eventId;
         document.getElementById('reviewText').value = currentText;
+        closeDialog('eventModal');
         openDialog('reviewModal');
         setTimeout(() => document.getElementById('reviewText')?.focus(), 0);
     };
@@ -111,7 +119,7 @@
         if (!review) { document.getElementById('reviewText').focus(); return; }
         try {
             await request(`/events/review/${encodeURIComponent(eventId)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ review_text: review }) });
-            closeDialog('reviewModal'); closeDialog('eventModal'); window.calendar?.refetchEvents(); window.loadStats?.(); notify('Отзыв сохранён.');
+            closeDialog('reviewModal'); closeDialog('eventModal'); window.calendar?.refetchEvents(); window.workspace?.refreshBootstrap?.().then(() => window.workspace?.renderCurrent?.()); notify('Отзыв сохранён.');
         } catch (error) { notify(error.message || 'Не удалось сохранить отзыв', 'danger'); }
     }
 })();
