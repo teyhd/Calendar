@@ -1,10 +1,6 @@
-<a class="{{linkClass}}" href="/?scope=all">Календарь</a>
-<a class="{{linkClass}}" href="/?scope=mine">Моё</a>
-{{#if user.permissions.view_children}}<a class="{{linkClass}}" href="/?scope=children">Дети</a>{{/if}}
-<a class="{{linkClass}}" href="/?scope=archive">История</a>
-{{#if user.permissions.create_event}}<a class="{{linkClass}}" href="/?compose=create">Создать</a>{{/if}}
-{{#if user.permissions.moderate_event}}<a class="{{linkClass}}" href="/?scope=moderation">Модерация</a>{{/if}}
-{{#if canImportYearPlan}}<a class="{{linkClass}}" href="/?panel=import">Импорт графика</a>{{/if}}
-{{#if user.permissions.view_analytics}}<a class="{{linkClass}}" href="/?panel=analytics">Аналитика</a>{{/if}}
-<a class="{{linkClass}}" href="/?scope=reviews">Отзывы</a>
-{{#if user.permissions.manage_settings}}<a class="{{linkClass}}" href="/?panel=settings">Справочники</a>{{/if}}
+{{#each workspaceNavigation}}
+    <a class="{{../linkClass}}{{#if isActive}} is-active{{/if}}" href="{{href}}" data-workspace-view="{{view}}"{{#if isActive}} aria-current="page"{{/if}}>
+        <span class="app-nav-icon" aria-hidden="true">{{#if (eq icon "calendar")}}▦{{else if (eq icon "users")}}◉{{else if (eq icon "bookmark")}}▣{{else if (eq icon "shield")}}◈{{else if (eq icon "archive")}}□{{else if (eq icon "star")}}★{{else if (eq icon "chart")}}▥{{else if (eq icon "upload")}}↑{{else if (eq icon "settings")}}⚙{{else}}●{{/if}}</span>
+        <span>{{label}}</span>{{#if count}}<span class="app-nav-count">{{count}}</span>{{/if}}
+    </a>
+{{/each}}
