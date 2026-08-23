@@ -2,7 +2,15 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 process.env.NODE_ENV = 'test';
-const { buildYearPlanImportRecords, canImportYearPlan, eventVisibleTo, parseCsvSnapshot, sourceDateToIso } = await import('../app.js');
+const {
+    buildYearPlanImportRecords,
+    buildYearPlanTitleNormalization,
+    canImportYearPlan,
+    eventVisibleTo,
+    parseCsvSnapshot,
+    sourceDateToIso,
+    YEAR_PLAN_TITLE_NORMALIZATION
+} = await import('../app.js');
 
 const header = 'Уч. нед.,Дата,Начальная школа,5-6 классы,7-9 классы,10-11 классы,комментарии';
 
@@ -70,4 +78,49 @@ test('creator sees pending events when the SSO user ID is a string', async () =>
     const event = { created_by: 147, status: 'WAITING_ADMIN', is_admin_event: 0 };
     assert.equal(await eventVisibleTo(event, { id: '147', type: 3 }), true);
     assert.equal(await eventVisibleTo(event, { id: '148', type: 3 }), false);
+});
+
+function titleNormalizationEvents() {
+    let id = 1;
+    return YEAR_PLAN_TITLE_NORMALIZATION.corrections.flatMap((change) => Array.from({ length: change.expected }, () => ({
+        id: id++,
+        title: change.from,
+        source_date: '2026-09-01',
+        target_audience_type: 'multiple_classes',
+        target_audience_id: String(id)
+    })));
+}
+
+test('title normalization changes only the reviewed exact source titles', () => {
+    const events = titleNormalizationEvents();
+    const normalization = buildYearPlanTitleNormalization(events);
+    const expectedCount = YEAR_PLAN_TITLE_NORMALIZATION.corrections.reduce((total, item) => total + item.expected, 0);
+
+    assert.equal(normalization.alreadyApplied, false);
+    assert.equal(normalization.corrections.length, expectedCount);
+    assert.deepEqual(
+        normalization.corrections.find((item) => item.from === 'день полетов в аэротрубе'),
+        {
+            id: 17,
+            date: '2026-09-01',
+            from: 'день полетов в аэротрубе',
+            to: 'День полётов в аэротрубе',
+            audienceType: 'multiple_classes'
+        }
+    );
+});
+
+test('title normalization stops if the reviewed source set changed or produces a duplicate', () => {
+    const missing = titleNormalizationEvents().slice(1);
+    assert.throws(() => buildYearPlanTitleNormalization(missing), /Набор исходных названий изменился/);
+
+    const duplicate = titleNormalizationEvents();
+    duplicate.push({
+        id: 999,
+        title: 'Каникулы',
+        source_date: '2026-09-01',
+        target_audience_type: duplicate[23].target_audience_type,
+        target_audience_id: duplicate[23].target_audience_id
+    });
+    assert.throws(() => buildYearPlanTitleNormalization(duplicate), /создаёт дубликат/);
 });
