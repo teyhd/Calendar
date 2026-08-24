@@ -38,6 +38,8 @@ test('workspace default and visible navigation are role-adaptive', () => {
     assert.equal(normalizeWorkspaceView('moderation', teacher), 'calendar');
     assert.ok(workspaceNavigation(parent).some((item) => item.view === 'children'));
     assert.ok(workspaceNavigation(admin, { pendingCount: 2 }).some((item) => item.view === 'moderation' && item.count === 2));
+    assert.ok(workspaceNavigation(student).some((item) => item.view === 'google-calendar'));
+    assert.equal(normalizeWorkspaceView('google', student), 'google-calendar');
 });
 
 test('administrator calendar visibility includes every event status', async () => {

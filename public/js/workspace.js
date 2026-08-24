@@ -9,6 +9,7 @@
         analytics: ['Аналитика', 'Динамика активности и участия в мероприятиях.'],
         import: ['Импорт годового графика', 'Проверьте CSV-снимок перед созданием заявок на модерацию.'],
         settings: ['Настройки календаря', 'Справочники календаря и доступные значения.'],
+        'google-calendar': ['Google Calendar', 'Подключите отдельный календарь и управляйте безопасной синхронизацией мероприятий.'],
         notifications: ['Уведомления', 'Все решения, напоминания и изменения по вашим событиям.']
     };
     const LEGACY_VIEWS = { all: 'calendar', archive: 'history' };
@@ -26,6 +27,7 @@
     const formatDate = (value) => window.calendarUI?.formatDate?.(value) || String(value || '');
     const request = (url, options = {}) => window.appUI?.request(url, options);
     const formRequest = (url, payload = {}) => request(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const jsonRequest = (url, method, payload = {}) => request(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     const dialog = (id) => document.getElementById(id);
     const openDialog = (id, opener) => window.appUI?.openDialog(id, opener);
     const closeDialog = (id) => window.appUI?.closeDialog(id);
@@ -104,7 +106,7 @@
         if (!overview || !state.bootstrap) return;
         const counts = state.bootstrap.counts || {};
         const pending = Number(counts.pending || 0);
-        if (['analytics', 'settings', 'import', 'notifications'].includes(state.view)) { overview.innerHTML = ''; return; }
+        if (['analytics', 'settings', 'import', 'google-calendar', 'notifications'].includes(state.view)) { overview.innerHTML = ''; return; }
         const cards = state.view === 'moderation'
             ? [['Ожидают решения', pending], ['Опубликовано', counts.approved || 0], ['В истории', counts.archive || 0]]
             : [['Доступно', counts.all || 0], ['Опубликовано', counts.approved || 0], ['На модерации', pending], ['В истории', counts.archive || 0]];
@@ -324,6 +326,84 @@
         initTitleNormalization();
     }
 
+    function googleSyncStatusLabel(status) {
+        return ({
+            active: 'Синхронизация активна',
+            paused: 'Синхронизация приостановлена',
+            reauth_required: 'Нужно переподключить Google',
+            error: 'Синхронизация требует внимания',
+            disconnected: 'Отключено'
+        })[status] || 'Подключение не настроено';
+    }
+
+    function googleDateTime(value) {
+        if (!value) return '—';
+        const parsed = new Date(String(value).replace(' ', 'T'));
+        if (Number.isNaN(parsed.getTime())) return String(value);
+        return new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium', timeStyle: 'short' }).format(parsed);
+    }
+
+    function googleCalendarMarkup(data) {
+        if (!data.configured) return `<section class="app-surface app-surface-pad"><h2 class="app-section-title">Подключение пока недоступно</h2><p class="app-help">Администратор ещё не настроил OAuth-приложение Google и защищённое хранение токенов. Ваши события и данные Calendar не изменялись.</p></section>`;
+        const connection = data.connection;
+        if (!connection) return `<section class="app-surface app-surface-pad google-calendar-intro"><h2 class="app-section-title">Ваш отдельный школьный календарь</h2><p class="app-page-summary">Calendar создаст отдельный Google-календарь и будет синхронизировать только утверждённые мероприятия, в которых вы или выбранные дети участвуете. Личные события и другие календари не затрагиваются.</p><ul class="app-summary-list"><li>События с самостоятельной записью появляются после регистрации.</li><li>Отменённые события остаются в календаре с заметной отметкой.</li><li>Значения токенов никогда не показываются и не сохраняются в браузере.</li></ul><a class="app-btn app-btn-primary" href="/integrations/google-calendar/connect">Подключить Google Calendar</a></section>`;
+        const schedule = connection.schedule || {};
+        const isDaily = Number(schedule.interval_minutes) === 1440;
+        const canSync = connection.status === 'active';
+        const reconnect = ['reauth_required', 'error'].includes(connection.status)
+            ? '<a class="app-btn app-btn-primary" href="/integrations/google-calendar/connect">Переподключить Google</a>' : '';
+        const childControls = (data.children || []).length ? `<fieldset class="app-form-section"><legend>Дети для синхронизации</legend><p class="app-help">Выберите детей, чьи доступные мероприятия будут добавляться в этот Google-календарь.</p>${data.children.map((child) => `<label class="app-check"><input type="checkbox" name="selected_subject_ids" value="${Number(child.id)}"${(connection.selected_subject_ids || []).includes(Number(child.id)) ? ' checked' : ''}><span>${escapeHtml(child.name)}${child.class_name ? ` · ${escapeHtml(child.class_name)}` : ''}</span></label>`).join('')}</fieldset>` : '';
+        const runs = (data.runs || []).length ? `<section class="app-surface app-surface-pad app-section-gap"><h2 class="app-section-title">Последние запуски</h2><div class="app-table-wrap"><table class="app-table"><thead><tr><th>Начало</th><th>Источник</th><th>Статус</th><th>Результат</th></tr></thead><tbody>${data.runs.map((run) => `<tr><td>${escapeHtml(googleDateTime(run.started_at))}</td><td>${escapeHtml(({ manual: 'Вручную', schedule: 'По расписанию', event_change: 'Изменение события', reconnect: 'Подключение' })[run.trigger_type] || run.trigger_type)}</td><td>${escapeHtml(({ success: 'Готово', partial: 'Частично', failed: 'Ошибка', running: 'Выполняется' })[run.status] || run.status)}</td><td>${run.error_message ? escapeHtml(run.error_message) : `+${Number(run.created_count)} · ↻${Number(run.updated_count)} · отменено ${Number(run.canceled_count)}`}</td></tr>`).join('')}</tbody></table></div></section>` : '';
+        return `<section class="app-surface app-surface-pad google-calendar-status"><div class="app-section-head"><div><h2 class="app-section-title">${escapeHtml(connection.calendar_name)}</h2><p class="app-help">${escapeHtml(connection.account_email)} · ${escapeHtml(googleSyncStatusLabel(connection.status))}</p></div><span class="app-type">${connection.token_present ? 'Разрешение активно' : 'Токен отсутствует'}</span></div><dl class="app-detail-list"><div><dt>Последняя успешная синхронизация</dt><dd>${escapeHtml(googleDateTime(connection.last_sync_at))}</dd></div><div><dt>Следующая сверка</dt><dd>${escapeHtml(googleDateTime(connection.next_sync_at))}</dd></div><div><dt>Часовой пояс</dt><dd>${escapeHtml(schedule.time_zone || 'Europe/Moscow')}</dd></div></dl>${connection.last_error ? `<div class="app-alert app-alert-warning">${escapeHtml(connection.last_error)}</div>` : ''}<div class="app-actions-row"><a class="app-btn app-btn-secondary" target="_blank" rel="noopener noreferrer" href="${escapeHtml(connection.calendar_url)}">Открыть календарь</a>${canSync ? '<button class="app-btn app-btn-secondary" type="button" data-google-sync>Синхронизировать сейчас</button>' : ''}${reconnect}<button class="app-btn app-btn-danger" type="button" data-google-disconnect>Отключить</button></div></section><form class="app-surface app-surface-pad app-section-gap" id="googleCalendarSettings"><h2 class="app-section-title">Расписание и участие</h2><label class="app-check"><input type="checkbox" name="sync_enabled"${canSync ? ' checked' : ''}><span>Выполнять синхронизацию</span></label><div class="app-two-col"><label class="app-field"><span class="app-label">Контрольная сверка</span><select class="app-select" name="sync_interval_minutes"><option value="15"${Number(schedule.interval_minutes) === 15 ? ' selected' : ''}>Каждые 15 минут</option><option value="60"${Number(schedule.interval_minutes) === 60 ? ' selected' : ''}>Каждый час</option><option value="180"${Number(schedule.interval_minutes) === 180 ? ' selected' : ''}>Каждые 3 часа</option><option value="480"${Number(schedule.interval_minutes) === 480 ? ' selected' : ''}>Каждые 8 часов</option><option value="1440"${isDaily ? ' selected' : ''}>Раз в день</option></select></label><label class="app-field" data-google-daily${isDaily ? '' : ' hidden'}><span class="app-label">Время ежедневной сверки</span><input class="app-input" type="time" name="daily_sync_time" value="${escapeHtml(schedule.daily_time || '09:00')}"></label></div><p class="app-help">Изменения в Calendar ставятся на синхронизацию сразу; это расписание выполняет контрольную сверку.</p>${childControls}<footer class="app-form-actions"><button class="app-btn app-btn-primary" type="submit">Сохранить настройки</button></footer></form>${runs}`;
+    }
+
+    async function renderGoogleCalendar() {
+        const area = content();
+        area.innerHTML = '<div class="app-modal-loading"><span class="app-spinner" aria-hidden="true"></span><div>Загрузка Google Calendar…</div></div>';
+        try {
+            const data = await request('/api/integrations/google-calendar');
+            area.innerHTML = googleCalendarMarkup(data);
+            const form = document.getElementById('googleCalendarSettings');
+            const interval = form?.querySelector('[name="sync_interval_minutes"]');
+            const daily = form?.querySelector('[data-google-daily]');
+            interval?.addEventListener('change', () => { if (daily) daily.hidden = Number(interval.value) !== 1440; });
+            form?.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const submit = form.querySelector('[type="submit"]');
+                submit.disabled = true;
+                try {
+                    const payload = {
+                        sync_enabled: Boolean(form.querySelector('[name="sync_enabled"]')?.checked),
+                        sync_interval_minutes: Number(interval?.value || 60),
+                        daily_sync_time: form.querySelector('[name="daily_sync_time"]')?.value || '',
+                        selected_subject_ids: [...form.querySelectorAll('[name="selected_subject_ids"]:checked')].map((input) => Number(input.value))
+                    };
+                    await jsonRequest('/api/integrations/google-calendar/settings', 'PATCH', payload);
+                    notify('Настройки Google Calendar сохранены.');
+                    await renderGoogleCalendar();
+                } catch (error) { notify(error.message || 'Не удалось сохранить настройки.', 'danger'); }
+                finally { submit.disabled = false; }
+            });
+            area.querySelector('[data-google-sync]')?.addEventListener('click', async (event) => {
+                const button = event.currentTarget; button.disabled = true;
+                try {
+                    const result = await formRequest('/api/integrations/google-calendar/sync');
+                    notify(result.started ? 'Синхронизация выполнена.' : 'Синхронизация уже выполняется.');
+                    await renderGoogleCalendar();
+                } catch (error) { notify(error.message || 'Не удалось синхронизировать.', 'danger'); }
+                finally { button.disabled = false; }
+            });
+            area.querySelector('[data-google-disconnect]')?.addEventListener('click', async () => {
+                if (!window.confirm('Отключить Google Calendar? Созданный календарь и его события останутся в Google.')) return;
+                try {
+                    const result = await formRequest('/api/integrations/google-calendar/disconnect');
+                    notify(result.revoke_failed ? 'Подключение удалено из Calendar; разрешение также можно отозвать в настройках Google.' : 'Google Calendar отключён.');
+                    await renderGoogleCalendar();
+                } catch (error) { notify(error.message || 'Не удалось отключить Google Calendar.', 'danger'); }
+            });
+        } catch (error) { area.innerHTML = `<div class="app-alert app-alert-danger">${escapeHtml(error.message || 'Не удалось загрузить Google Calendar.')}</div>`; }
+    }
+
     async function renderNotifications() {
         const area = content();
         area.innerHTML = '<section class="app-surface app-list-surface"><div class="app-modal-loading"><span class="app-spinner" aria-hidden="true"></span><div>Загрузка уведомлений…</div></div></section>';
@@ -497,6 +577,7 @@
         else if (state.view === 'notifications') await renderNotifications();
         else if (state.view === 'analytics') { area.innerHTML = analyticsMarkup(); area.querySelectorAll('select').forEach((select) => select.addEventListener('change', loadAnalytics)); await loadAnalytics(); }
         else if (state.view === 'settings') { area.innerHTML = '<div class="app-modal-loading"><span class="app-spinner" aria-hidden="true"></span><div>Загрузка справочников…</div></div>'; try { area.innerHTML = settingsMarkup(await request('/api/workspace/settings')); } catch (error) { area.innerHTML = `<div class="app-alert app-alert-danger">${escapeHtml(error.message)}</div>`; } }
+        else if (state.view === 'google-calendar') await renderGoogleCalendar();
         else if (state.view === 'import') { area.innerHTML = importMarkup(); initImport(); }
         area.setAttribute('aria-busy', 'false');
     }
