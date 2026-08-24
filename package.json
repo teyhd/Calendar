@@ -4,7 +4,7 @@
   "description": "",
   "main": "app.js",
   "scripts": {
-    "test": "node --test test/**/*.test.mjs",
+    "test": "node --test --test-concurrency=1",
     "build:css": "npx @tailwindcss/cli -i ./src/styles/app.css -o ./public/css/app.css --minify",
     "sync:vendor": "node ./scripts/sync-vendor.mjs",
     "build:frontend": "npm run build:css && npm run sync:vendor",
