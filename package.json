@@ -23,6 +23,7 @@
     "express-handlebars": "^6.0.6",
     "express-validator": "^7.3.2",
     "fs-extra": "^11.3.5",
+    "googleapis": "^144.0.0",
     "mysql2": "^3.22.5",
     "node-cron": "^4.5.0"
   },

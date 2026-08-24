@@ -19,6 +19,7 @@ import {
 } from './vendor/auth.mjs';
 import {
     assertActiveUsers,
+    getActiveUserById,
     getActiveUsersByIds,
     getCalendarAdmins,
     getChildrenForParent,
@@ -29,6 +30,19 @@ import {
     parseIdList,
     STAFF_ROLE_IDS
 } from './vendor/sso.mjs';
+import {
+    GOOGLE_SYNC_INTERVALS,
+    authorizationURL as googleAuthorizationURL,
+    createManagedCalendar,
+    decryptGoogleRefreshToken,
+    encryptGoogleRefreshToken,
+    exchangeGoogleAuthorizationCode,
+    getGoogleCalendarConfig,
+    googleCalendarClient,
+    googleCalendarConfigured,
+    googleErrorDetails,
+    revokeGoogleRefreshToken
+} from './vendor/google-calendar.mjs';
 
 dotenv.config();
 
@@ -40,6 +54,8 @@ const visibleStatuses = new Set(['APPROVED', 'COMPLETED', 'CANCELED']);
 const audienceTypes = new Set(['class', 'parallel', 'department', 'specific_users', 'all', 'multiple_classes']);
 const levels = new Set(['school', 'city', 'regional', 'national', 'international']);
 const rewardTypes = new Set(['none', 'educational', 'competitive']);
+const googleOAuthStateCookieName = 'calendar.google.oauth.state';
+const googleSyncInFlight = new Set();
 const YEAR_PLAN_IMPORT = Object.freeze({
     sourceName: 'График года',
     sheetName: '26-27',
@@ -181,7 +197,7 @@ function successResponse(req, res, payload = {}) {
     return wantsJSON(req) ? res.json({ success: true, ...payload }) : null;
 }
 
-const workspaceViews = new Set(['calendar', 'mine', 'children', 'moderation', 'history', 'reviews', 'analytics', 'import', 'settings', 'notifications']);
+const workspaceViews = new Set(['calendar', 'mine', 'children', 'moderation', 'history', 'reviews', 'analytics', 'import', 'settings', 'google-calendar', 'notifications']);
 const workspaceViewAliases = Object.freeze({
     all: 'calendar',
     archive: 'history',
@@ -194,6 +210,8 @@ const workspaceViewAliases = Object.freeze({
     analytics: 'analytics',
     import: 'import',
     settings: 'settings',
+    google: 'google-calendar',
+    'google-calendar': 'google-calendar',
     notifications: 'notifications'
 });
 
@@ -237,6 +255,7 @@ export function workspaceNavigation(actor, { pendingCount = 0, unreadCount = 0 }
     if (actor?.permissions?.view_analytics) navigation.push(item('analytics', 'Аналитика', 'chart'));
     if (canImportYearPlan(actor)) navigation.push(item('import', 'Импорт плана', 'upload'));
     if (actor?.permissions?.manage_settings) navigation.push(item('settings', 'Настройки', 'settings'));
+    navigation.push(item('google-calendar', 'Google Calendar', 'calendar'));
     navigation.push(item('notifications', 'Уведомления', 'bell', unreadCount));
     return navigation;
 }
@@ -678,6 +697,438 @@ export async function workspaceEventPageFor(actor, query = {}) {
     };
 }
 
+function safeEqualText(left, right) {
+    const a = Buffer.from(String(left || ''));
+    const b = Buffer.from(String(right || ''));
+    return a.length === b.length && a.length > 0 && crypto.timingSafeEqual(a, b);
+}
+
+function moscowDateParts(date = new Date()) {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
+    }).formatToParts(date);
+    return Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+}
+
+function moscowSqlDateTime(date = new Date()) {
+    const part = moscowDateParts(date);
+    return `${part.year}-${part.month}-${part.day} ${part.hour}:${part.minute}:${part.second}`;
+}
+
+export function nextGoogleSyncAt(intervalMinutes, dailyTime = null, now = new Date()) {
+    if (Number(intervalMinutes) !== 1440 || !/^\d{2}:\d{2}$/.test(String(dailyTime || ''))) {
+        return moscowSqlDateTime(new Date(now.getTime() + Number(intervalMinutes) * 60_000));
+    }
+    const part = moscowDateParts(now);
+    const candidate = new Date(`${part.year}-${part.month}-${part.day}T${dailyTime}:00+03:00`);
+    if (candidate.getTime() <= now.getTime()) candidate.setUTCDate(candidate.getUTCDate() + 1);
+    return moscowSqlDateTime(candidate);
+}
+
+function googleEventDateTime(value) {
+    const normalized = String(value || '').replace(' ', 'T');
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(normalized)) throw new Error('Некорректное время события для Google Calendar');
+    return `${normalized}+03:00`;
+}
+
+function googleCalendarOrigin() {
+    for (const value of [process.env.GOOGLE_OAUTH_CALLBACK_URL, process.env.SSO_CALLBACK_URL]) {
+        try { return new URL(value).origin; } catch { /* try the next configured callback */ }
+    }
+    return '';
+}
+
+function googleOAuthCookieOptions() {
+    return {
+        path: '/',
+        httpOnly: true,
+        secure: process.env.NODE_ENV !== 'development',
+        sameSite: 'lax',
+        maxAge: 10 * 60 * 1_000
+    };
+}
+
+function signGoogleOAuthState(payload) {
+    const secret = String(process.env.AUTH_SESSION_SECRET || '');
+    if (!secret) throw new Error('Авторизация Calendar не настроена');
+    const body = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+    const signature = crypto.createHmac('sha256', secret).update(`google-oauth:${body}`).digest('base64url');
+    return `${body}.${signature}`;
+}
+
+function readGoogleOAuthState(value) {
+    const [body, signature, ...extra] = String(value || '').split('.');
+    const secret = String(process.env.AUTH_SESSION_SECRET || '');
+    if (!body || !signature || extra.length || !secret) return null;
+    const expected = crypto.createHmac('sha256', secret).update(`google-oauth:${body}`).digest('base64url');
+    if (!safeEqualText(signature, expected)) return null;
+    try {
+        const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+        if (!payload?.state || !payload?.codeVerifier || !Number(payload?.uid) || Number(payload?.exp) <= Math.floor(Date.now() / 1_000)) return null;
+        return payload;
+    } catch { return null; }
+}
+
+function requireSameOrigin(req, res, next) {
+    const origin = String(req.get('origin') || '');
+    const expected = `${req.protocol}://${req.get('host')}`;
+    if (!origin || origin !== expected) return apiError(res, 403, 'Запрос должен быть выполнен из Calendar');
+    next();
+}
+
+function googleConnectionPublic(connection, subjects = [], runs = []) {
+    if (!connection) return { configured: googleCalendarConfigured(), connection: null, runs: [] };
+    const calendarURL = connection.calendar_id
+        ? `https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(connection.calendar_id)}`
+        : null;
+    return {
+        configured: googleCalendarConfigured(),
+        connection: {
+            id: Number(connection.id),
+            status: connection.status,
+            account_email: connection.google_email,
+            calendar_name: connection.calendar_name,
+            calendar_url: calendarURL,
+            token_present: Boolean(connection.refresh_token_ciphertext),
+            schedule: {
+                interval_minutes: Number(connection.sync_interval_minutes),
+                daily_time: connection.daily_sync_time ? String(connection.daily_sync_time).slice(0, 5) : null,
+                time_zone: connection.time_zone
+            },
+            selected_subject_ids: subjects.map((subject) => Number(subject.subject_user_id)),
+            last_sync_at: connection.last_sync_at,
+            last_sync_started_at: connection.last_sync_started_at,
+            next_sync_at: connection.next_sync_at,
+            last_error: connection.last_error_message || null,
+            last_error_code: connection.last_error_code || null
+        },
+        runs: runs.map((run) => ({
+            id: Number(run.id), trigger_type: run.trigger_type, status: run.status,
+            started_at: run.started_at, finished_at: run.finished_at,
+            created_count: Number(run.created_count), updated_count: Number(run.updated_count),
+            canceled_count: Number(run.canceled_count), skipped_count: Number(run.skipped_count),
+            error_message: run.error_message || null
+        }))
+    };
+}
+
+async function currentGoogleConnection(userId) {
+    const [rows] = await pool.query(`
+        SELECT * FROM google_calendar_connections
+         WHERE user_id = ?
+         ORDER BY (status <> 'disconnected') DESC, id DESC
+         LIMIT 1
+    `, [Number(userId)]);
+    return rows[0] || null;
+}
+
+async function googleConnectionSubjects(connectionId) {
+    const [rows] = await pool.query(`
+        SELECT subject_user_id FROM google_calendar_connection_subjects
+         WHERE connection_id = ? ORDER BY subject_user_id
+    `, [Number(connectionId)]);
+    return rows;
+}
+
+async function googleConnectionRuns(connectionId) {
+    if (!connectionId) return [];
+    const [rows] = await pool.query(`
+        SELECT id, trigger_type, status, started_at, finished_at, created_count, updated_count, canceled_count, skipped_count, error_message
+          FROM google_calendar_sync_runs
+         WHERE connection_id = ?
+         ORDER BY id DESC LIMIT 10
+    `, [Number(connectionId)]);
+    return rows;
+}
+
+async function googleConnectionWorkspace(actor) {
+    if (!googleCalendarConfigured()) {
+        const children = actor.type === 6 ? await getChildrenForParent(actor.id) : [];
+        return { configured: false, connection: null, runs: [], children: children.map((child) => ({ id: child.id, name: child.name, class_name: child.kaf_name || '' })) };
+    }
+    const connection = await currentGoogleConnection(actor.id);
+    const [subjects, runs, children] = await Promise.all([
+        connection ? googleConnectionSubjects(connection.id) : [],
+        connection ? googleConnectionRuns(connection.id) : [],
+        actor.type === 6 ? getChildrenForParent(actor.id) : []
+    ]);
+    return {
+        ...googleConnectionPublic(connection, subjects, runs),
+        children: children.map((child) => ({ id: child.id, name: child.name, class_name: child.kaf_name || '' }))
+    };
+}
+
+function audienceMatchesGoogleSubject(event, subject) {
+    const audienceIds = eventAudienceIds(event);
+    if (event.target_audience_type === 'all') return true;
+    if (event.target_audience_type === 'specific_users') return audienceIds.some((id) => sameUserId(id, subject.id));
+    if (event.target_audience_type === 'class' || event.target_audience_type === 'department') return Number(subject.kaf) === Number(event.target_audience_id);
+    if (event.target_audience_type === 'multiple_classes') return audienceIds.some((id) => Number(subject.kaf) === id);
+    if (event.target_audience_type === 'parallel') return parallelFromName(subject.kaf_name) === String(event.target_audience_id);
+    return false;
+}
+
+export function googleSyncEligibility(event, owner, subjects, registeredIds = []) {
+    if (!owner || !subjects?.length) return null;
+    if (Number(event.is_admin_event)) return owner.type === 5 ? { subjectNames: [owner.name] } : null;
+    const registered = new Set(registeredIds.map(Number));
+    const ownerIsResponsible = owner.type !== 6 && parseIdList(event.responsible_ids).some((id) => sameUserId(id, owner.id));
+    const matchingSubjects = subjects.filter((subject) => Number(event.is_registration_enabled)
+        ? registered.has(Number(subject.id))
+        : registered.has(Number(subject.id)) || audienceMatchesGoogleSubject(event, subject));
+    if (!ownerIsResponsible && !matchingSubjects.length) return null;
+    return {
+        subjectNames: [...new Set([
+            ...(ownerIsResponsible ? [owner.name] : []),
+            ...matchingSubjects.map((subject) => subject.name)
+        ])]
+    };
+}
+
+async function subjectsForGoogleConnection(connection) {
+    const owner = await getActiveUserById(connection.user_id);
+    if (!owner) return { owner: null, subjects: [] };
+    if (owner.type !== 6) return { owner, subjects: [owner] };
+    const [selectedRows, children] = await Promise.all([googleConnectionSubjects(connection.id), getChildrenForParent(owner.id)]);
+    const selected = new Set(selectedRows.map((row) => Number(row.subject_user_id)));
+    return { owner, subjects: children.filter((child) => selected.has(Number(child.id))) };
+}
+
+async function eligibleGoogleEvents(connection) {
+    const { owner, subjects } = await subjectsForGoogleConnection(connection);
+    if (!owner || !subjects.length) return [];
+    const now = moscowSqlDateTime();
+    const [events] = await pool.query(`
+        SELECT e.* FROM events e
+         WHERE e.status = 'APPROVED'
+           AND e.end_datetime >= ?
+         ORDER BY e.start_datetime ASC, e.id ASC
+    `, [now]);
+    if (!events.length) return [];
+    const [participantRows] = await pool.query(
+        `SELECT event_id, user_id FROM event_participants WHERE event_id IN (${events.map(() => '?').join(',')})`,
+        events.map((event) => event.id)
+    );
+    const participantIds = new Map();
+    for (const row of participantRows) participantIds.set(Number(row.event_id), [...(participantIds.get(Number(row.event_id)) || []), Number(row.user_id)]);
+    return events.flatMap((event) => {
+        const eligibility = googleSyncEligibility(event, owner, subjects, participantIds.get(Number(event.id)) || []);
+        return eligibility ? [{ event, subjectNames: eligibility.subjectNames }] : [];
+    });
+}
+
+function googleEventPayload(event, connectionId, subjectNames = [], { canceled = false } = {}) {
+    const origin = googleCalendarOrigin();
+    const sourceURL = origin ? `${origin}/?event=${encodeURIComponent(event.id)}` : '';
+    const description = [
+        canceled ? 'Мероприятие отменено или больше недоступно для участника.' : String(event.description || '').trim(),
+        subjectNames.length > 1 ? `Участники: ${subjectNames.join(', ')}` : '',
+        sourceURL ? `Источник: ${sourceURL}` : ''
+    ].filter(Boolean).join('\n\n');
+    return {
+        summary: `${canceled ? 'Отменено — ' : ''}${event.title}`.slice(0, 1024),
+        description: description.slice(0, 8_000),
+        location: event.location || '',
+        start: { dateTime: googleEventDateTime(event.start_datetime), timeZone: 'Europe/Moscow' },
+        end: { dateTime: googleEventDateTime(event.end_datetime), timeZone: 'Europe/Moscow' },
+        status: 'confirmed',
+        transparency: canceled ? 'transparent' : 'opaque',
+        colorId: canceled ? '11' : '10',
+        extendedProperties: {
+            private: {
+                'calendar.source': 'school-calendar',
+                'calendar.event_id': String(event.id),
+                'calendar.connection_id': String(connectionId)
+            }
+        }
+    };
+}
+
+function googlePayloadHash(payload) {
+    return crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+}
+
+async function upsertGoogleEventLink(connectionId, eventId, googleEventId, payloadHash, state, errorMessage = null) {
+    await pool.query(`
+        INSERT INTO google_calendar_event_links (connection_id, event_id, google_event_id, payload_hash, state, last_synced_at, last_error_message)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE google_event_id = VALUES(google_event_id), payload_hash = VALUES(payload_hash), state = VALUES(state), last_synced_at = VALUES(last_synced_at), last_error_message = VALUES(last_error_message)
+    `, [connectionId, eventId, googleEventId, payloadHash, state, moscowSqlDateTime(), errorMessage]);
+}
+
+async function markGoogleEventCanceled(calendar, connection, link, event) {
+    const payload = googleEventPayload(event, connection.id, [], { canceled: true });
+    try {
+        await calendar.events.patch({ calendarId: connection.calendar_id, eventId: link.google_event_id, requestBody: payload });
+        await upsertGoogleEventLink(connection.id, event.id, link.google_event_id, googlePayloadHash(payload), 'canceled');
+        return true;
+    } catch (error) {
+        if (Number(error?.code || error?.response?.status) === 404) {
+            await upsertGoogleEventLink(connection.id, event.id, link.google_event_id, googlePayloadHash(payload), 'canceled');
+            return true;
+        }
+        throw error;
+    }
+}
+
+async function syncGoogleCalendarConnection(connectionId, triggerType = 'schedule') {
+    if (!googleCalendarConfigured() || googleSyncInFlight.has(Number(connectionId))) return null;
+    const id = Number(connectionId);
+    const now = moscowSqlDateTime();
+    const lockUntil = moscowSqlDateTime(new Date(Date.now() + 15 * 60_000));
+    const [claim] = await pool.query(`
+        UPDATE google_calendar_connections
+           SET sync_lock_until = ?, sync_requested_at = NULL, last_sync_started_at = ?
+         WHERE id = ? AND status = 'active'
+           AND (sync_lock_until IS NULL OR sync_lock_until < ?)
+    `, [lockUntil, now, id, now]);
+    if (claim.affectedRows !== 1) return null;
+    googleSyncInFlight.add(id);
+    let runId = null;
+    let connection = null;
+    const summary = { created: 0, updated: 0, canceled: 0, skipped: 0 };
+    try {
+        const [connections] = await pool.query('SELECT * FROM google_calendar_connections WHERE id = ? LIMIT 1', [id]);
+        connection = connections[0];
+        if (!connection?.refresh_token_ciphertext) throw new Error('Подключение Google Calendar не содержит refresh token');
+        const [run] = await pool.query(
+            "INSERT INTO google_calendar_sync_runs (connection_id, trigger_type, status) VALUES (?, ?, 'running')",
+            [id, triggerType]
+        );
+        runId = run.insertId;
+        const refreshToken = decryptGoogleRefreshToken(connection);
+        const calendar = googleCalendarClient(refreshToken);
+        const candidates = await eligibleGoogleEvents(connection);
+        const [links] = await pool.query('SELECT * FROM google_calendar_event_links WHERE connection_id = ?', [id]);
+        const linksByEvent = new Map(links.map((link) => [Number(link.event_id), link]));
+        const candidateIds = new Set(candidates.map(({ event }) => Number(event.id)));
+
+        for (const { event, subjectNames } of candidates) {
+            const payload = googleEventPayload(event, id, subjectNames);
+            const payloadHash = googlePayloadHash(payload);
+            const link = linksByEvent.get(Number(event.id));
+            if (link?.state === 'synced' && link.payload_hash === payloadHash) {
+                summary.skipped += 1;
+                continue;
+            }
+            let googleEventId = link?.google_event_id;
+            try {
+                if (googleEventId) {
+                    await calendar.events.patch({ calendarId: connection.calendar_id, eventId: googleEventId, requestBody: payload });
+                    summary.updated += 1;
+                } else {
+                    const { data } = await calendar.events.insert({ calendarId: connection.calendar_id, requestBody: payload });
+                    if (!data.id) throw new Error('Google Calendar did not return an event id');
+                    googleEventId = data.id;
+                    summary.created += 1;
+                }
+            } catch (error) {
+                if (googleEventId && Number(error?.code || error?.response?.status) === 404) {
+                    const { data } = await calendar.events.insert({ calendarId: connection.calendar_id, requestBody: payload });
+                    if (!data.id) throw new Error('Google Calendar did not return an event id');
+                    googleEventId = data.id;
+                    summary.created += 1;
+                } else throw error;
+            }
+            await upsertGoogleEventLink(id, event.id, googleEventId, payloadHash, 'synced');
+        }
+
+        const staleLinks = links.filter((link) => !candidateIds.has(Number(link.event_id)) && link.state !== 'canceled');
+        if (staleLinks.length) {
+            const [events] = await pool.query(`
+                SELECT * FROM events WHERE id IN (${staleLinks.map(() => '?').join(',')})
+            `, staleLinks.map((link) => link.event_id));
+            const eventsById = new Map(events.map((event) => [Number(event.id), event]));
+            for (const link of staleLinks) {
+                const event = eventsById.get(Number(link.event_id));
+                if (!event || event.status === 'COMPLETED' || String(event.end_datetime) < now) continue;
+                if (await markGoogleEventCanceled(calendar, connection, link, event)) summary.canceled += 1;
+            }
+        }
+
+        const nextSync = nextGoogleSyncAt(connection.sync_interval_minutes, connection.daily_sync_time);
+        await pool.query(`
+            UPDATE google_calendar_connections
+               SET status = 'active', next_sync_at = ?, sync_lock_until = NULL,
+                   last_sync_at = ?, last_error_code = NULL, last_error_message = NULL, retry_count = 0
+             WHERE id = ?
+        `, [nextSync, moscowSqlDateTime(), id]);
+        await pool.query(`
+            UPDATE google_calendar_sync_runs
+               SET status = 'success', finished_at = ?, created_count = ?, updated_count = ?, canceled_count = ?, skipped_count = ?
+             WHERE id = ?
+        `, [moscowSqlDateTime(), summary.created, summary.updated, summary.canceled, summary.skipped, runId]);
+        return summary;
+    } catch (error) {
+        const detail = googleErrorDetails(error);
+        const retryCount = Math.min(Number(connection?.retry_count || 0) + 1, 4);
+        const retryDelayMinutes = [5, 15, 60, 360][retryCount - 1] || 360;
+        const nextSync = moscowSqlDateTime(new Date(Date.now() + retryDelayMinutes * 60_000));
+        const status = detail.needsReauth ? 'reauth_required' : detail.retryable ? 'active' : 'error';
+        await pool.query(`
+            UPDATE google_calendar_connections
+               SET status = ?, sync_lock_until = NULL, next_sync_at = ?, retry_count = ?,
+                   last_error_code = ?, last_error_message = ?
+             WHERE id = ?
+        `, [status, detail.retryable ? nextSync : null, retryCount, String(detail.status || 'google_error').slice(0, 64), detail.message, id]);
+        if (runId) await pool.query(`
+            UPDATE google_calendar_sync_runs
+               SET status = ?, finished_at = ?, created_count = ?, updated_count = ?, canceled_count = ?, skipped_count = ?, error_code = ?, error_message = ?
+             WHERE id = ?
+        `, [summary.created || summary.updated || summary.canceled ? 'partial' : 'failed', moscowSqlDateTime(), summary.created, summary.updated, summary.canceled, summary.skipped, String(detail.status || 'google_error').slice(0, 64), detail.message, runId]);
+        mlog('[ERROR]', 'Синхронизация Google Calendar', detail.message);
+        return null;
+    } finally {
+        googleSyncInFlight.delete(id);
+    }
+}
+
+async function runDueGoogleCalendarSyncs() {
+    if (!googleCalendarConfigured()) return;
+    try {
+        const now = moscowSqlDateTime();
+        const [rows] = await pool.query(`
+            SELECT id, CASE WHEN sync_requested_at IS NULL THEN 'schedule' ELSE 'event_change' END AS trigger_type
+              FROM google_calendar_connections
+             WHERE status = 'active'
+               AND (sync_lock_until IS NULL OR sync_lock_until < ?)
+               AND (sync_requested_at IS NOT NULL OR (next_sync_at IS NOT NULL AND next_sync_at <= ?))
+             ORDER BY sync_requested_at ASC, next_sync_at ASC
+             LIMIT 10
+        `, [now, now]);
+        for (let index = 0; index < rows.length; index += 2) {
+            await Promise.all(rows.slice(index, index + 2).map((row) => syncGoogleCalendarConnection(row.id, row.trigger_type)));
+        }
+    } catch (error) {
+        mlog('[ERROR]', 'Планировщик Google Calendar', error.code || error.message);
+    }
+}
+
+async function requestGoogleCalendarSyncForEventChange() {
+    if (!googleCalendarConfigured()) return;
+    try {
+        await pool.query(`
+            UPDATE google_calendar_connections
+               SET sync_requested_at = COALESCE(sync_requested_at, ?)
+             WHERE status = 'active'
+        `, [moscowSqlDateTime()]);
+    } catch (error) { mlog('[ERROR]', 'Постановка Google Calendar на сверку', error.code || error.message); }
+}
+
+async function requestGoogleCalendarSyncForParticipant(userId) {
+    if (!googleCalendarConfigured()) return;
+    try {
+        await pool.query(`
+            UPDATE google_calendar_connections connection
+            LEFT JOIN google_calendar_connection_subjects subject ON subject.connection_id = connection.id
+               SET connection.sync_requested_at = COALESCE(connection.sync_requested_at, ?)
+             WHERE connection.status = 'active'
+               AND (connection.user_id = ? OR subject.subject_user_id = ?)
+        `, [moscowSqlDateTime(), Number(userId), Number(userId)]);
+    } catch (error) { mlog('[ERROR]', 'Постановка участника Google Calendar на сверку', error.code || error.message); }
+}
+
 async function createNotification(userId, eventId, type, message) {
     try {
         await pool.query(
@@ -1037,6 +1488,7 @@ async function sendEventReminders() {
 if (process.env.NODE_ENV !== 'test') {
     cron.schedule('0 * * * *', autoCompleteEvents);
     cron.schedule('*/15 * * * *', sendEventReminders);
+    cron.schedule('* * * * *', runDueGoogleCalendarSyncs);
 }
 
 app.get('/', requirePageAuth, async (req, res) => {
@@ -1081,6 +1533,106 @@ app.get('/', requirePageAuth, async (req, res) => {
 });
 
 app.get('/admin/settings', requirePageAuth, requirePermission('manage_settings'), (req, res) => workspaceRedirect(req, res, { panel: 'settings' }));
+
+app.get('/integrations/google-calendar/connect', requirePageAuth, (req, res) => {
+    if (!googleCalendarConfigured()) return pageError(res, 503, 'Интеграция Google Calendar пока не настроена');
+    try {
+        const state = crypto.randomBytes(24).toString('base64url');
+        const codeVerifier = crypto.randomBytes(48).toString('base64url');
+        const payload = {
+            state,
+            codeVerifier,
+            uid: Number(user(req).id),
+            exp: Math.floor(Date.now() / 1_000) + 10 * 60
+        };
+        res.cookie(googleOAuthStateCookieName, signGoogleOAuthState(payload), googleOAuthCookieOptions());
+        res.redirect(googleAuthorizationURL({ state, codeVerifier }));
+    } catch (error) {
+        mlog('[ERROR]', 'Начало OAuth Google Calendar', error.code || error.message);
+        pageError(res, 503, 'Не удалось начать подключение Google Calendar');
+    }
+});
+
+app.get('/integrations/google-calendar/callback', requirePageAuth, async (req, res) => {
+    const saved = readGoogleOAuthState(req.cookies?.[googleOAuthStateCookieName]);
+    const state = String(req.query.state || '');
+    const code = String(req.query.code || '');
+    res.clearCookie(googleOAuthStateCookieName, googleOAuthCookieOptions());
+    if (!saved || !code || !safeEqualText(state, saved.state) || Number(saved.uid) !== Number(user(req).id)) {
+        return pageError(res, 400, 'Подтверждение Google Calendar не прошло проверку. Подключите календарь заново.');
+    }
+    try {
+        const { tokens, identity } = await exchangeGoogleAuthorizationCode(code, saved.codeVerifier);
+        const encrypted = encryptGoogleRefreshToken(tokens.refresh_token);
+        const [sameAccountRows] = await pool.query(`
+            SELECT * FROM google_calendar_connections
+             WHERE user_id = ? AND google_subject = ?
+             ORDER BY id DESC LIMIT 1
+        `, [user(req).id, identity.subject]);
+        let connection = sameAccountRows[0] || null;
+        if (connection) {
+            let managedCalendar = { id: connection.calendar_id, summary: connection.calendar_name };
+            try {
+                const { data } = await googleCalendarClient(tokens.refresh_token).calendars.get({ calendarId: connection.calendar_id });
+                if (data?.id) managedCalendar = { id: data.id, summary: data.summary || connection.calendar_name };
+            } catch (error) {
+                if (Number(error?.code || error?.response?.status) !== 404) throw error;
+                managedCalendar = await createManagedCalendar(tokens.refresh_token);
+            }
+            await pool.query(`
+                UPDATE google_calendar_connections
+                   SET google_email = ?, calendar_id = ?, calendar_name = ?, token_key_version = ?, refresh_token_ciphertext = ?, refresh_token_iv = ?, refresh_token_tag = ?,
+                       status = 'active', sync_requested_at = ?, next_sync_at = ?, sync_lock_until = NULL,
+                       last_error_code = NULL, last_error_message = NULL, retry_count = 0
+                 WHERE id = ?
+            `, [identity.email, managedCalendar.id, managedCalendar.summary, encrypted.token_key_version, encrypted.refresh_token_ciphertext, encrypted.refresh_token_iv, encrypted.refresh_token_tag,
+                moscowSqlDateTime(), moscowSqlDateTime(), connection.id]);
+            connection = { ...connection, status: 'active' };
+        } else {
+            const [oldConnections] = await pool.query(`
+                SELECT * FROM google_calendar_connections
+                 WHERE user_id = ? AND status IN ('active', 'paused', 'reauth_required', 'error')
+            `, [user(req).id]);
+            const calendar = await createManagedCalendar(tokens.refresh_token);
+            const db = await pool.getConnection();
+            try {
+                await db.beginTransaction();
+                await db.query(`
+                    UPDATE google_calendar_connections
+                       SET status = 'disconnected', refresh_token_ciphertext = NULL, refresh_token_iv = NULL, refresh_token_tag = NULL,
+                           token_key_version = NULL, sync_requested_at = NULL, next_sync_at = NULL, sync_lock_until = NULL
+                     WHERE user_id = ? AND status IN ('active', 'paused', 'reauth_required', 'error')
+                `, [user(req).id]);
+                const [created] = await db.query(`
+                    INSERT INTO google_calendar_connections (
+                        user_id, google_subject, google_email, calendar_id, calendar_name,
+                        token_key_version, refresh_token_ciphertext, refresh_token_iv, refresh_token_tag,
+                        status, sync_interval_minutes, time_zone, sync_requested_at, next_sync_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, 'Europe/Moscow', ?, ?)
+                `, [user(req).id, identity.subject, identity.email, calendar.id, calendar.summary,
+                    encrypted.token_key_version, encrypted.refresh_token_ciphertext, encrypted.refresh_token_iv, encrypted.refresh_token_tag,
+                    getGoogleCalendarConfig().defaultIntervalMinutes, moscowSqlDateTime(), moscowSqlDateTime()]);
+                await db.commit();
+                connection = { id: created.insertId };
+            } catch (error) {
+                await db.rollback();
+                throw error;
+            } finally { db.release(); }
+            for (const oldConnection of oldConnections) {
+                try {
+                    if (oldConnection.refresh_token_ciphertext) await revokeGoogleRefreshToken(decryptGoogleRefreshToken(oldConnection));
+                } catch (error) {
+                    mlog('[ERROR]', 'Отзыв предыдущего Google подключения', googleErrorDetails(error).message);
+                }
+            }
+        }
+        void syncGoogleCalendarConnection(connection.id, 'reconnect');
+        res.redirect('/?view=google-calendar&connected=1');
+    } catch (error) {
+        mlog('[ERROR]', 'OAuth callback Google Calendar', googleErrorDetails(error).message);
+        pageError(res, 400, 'Не удалось подключить Google Calendar. Проверьте разрешение и попробуйте снова.');
+    }
+});
 
 app.get('/events/create', requirePageAuth, requirePermission('create_event'), (req, res) => workspaceRedirect(req, res, { compose: 'create' }));
 
@@ -1424,6 +1976,7 @@ app.post('/events/admin-approve/:id', requirePageAuth, requirePermission('modera
         if (publishedNow) {
             await createNotification(event.created_by, eventId, 'approved', `Мероприятие «${event.title}» утверждено и опубликовано.`);
             await notifyAdmins(eventId, 'approved', `Мероприятие «${event.title}» утверждено и опубликовано.`, user(req).id);
+            await requestGoogleCalendarSyncForEventChange();
         }
         workspaceRedirect(req, res, { event: eventId, scope: publishedNow ? 'all' : 'moderation' });
     } catch (error) { pageError(res, 400, error.message || 'Ошибка сервера'); }
@@ -1537,6 +2090,106 @@ app.get('/api/workspace', requireApiAuth, async (req, res) => {
     } catch (error) { apiError(res, 500, 'Не удалось загрузить рабочее пространство'); }
 });
 
+app.get('/api/integrations/google-calendar', requireApiAuth, async (req, res) => {
+    try { res.json(await googleConnectionWorkspace(user(req))); }
+    catch (error) {
+        mlog('[ERROR]', 'Статус Google Calendar', error.code || error.message);
+        apiError(res, 500, 'Не удалось загрузить состояние Google Calendar');
+    }
+});
+
+app.patch('/api/integrations/google-calendar/settings', requireApiAuth, requireSameOrigin, async (req, res) => {
+    try {
+        if (!googleCalendarConfigured()) return apiError(res, 503, 'Интеграция Google Calendar пока не настроена');
+        const actor = user(req);
+        const connection = await currentGoogleConnection(actor.id);
+        if (!connection || connection.status === 'disconnected') return apiError(res, 404, 'Сначала подключите Google Calendar');
+        const interval = Number(req.body?.sync_interval_minutes);
+        if (!GOOGLE_SYNC_INTERVALS.includes(interval)) return apiError(res, 400, 'Выберите допустимый интервал синхронизации');
+        const dailyTime = interval === 1440 ? String(req.body?.daily_sync_time || '') : null;
+        if (interval === 1440 && !/^([01]\d|2[0-3]):[0-5]\d$/.test(dailyTime)) return apiError(res, 400, 'Укажите время ежедневной сверки');
+        const selectedIds = [...new Set(parseIdList(req.body?.selected_subject_ids))];
+        if (actor.type !== 6 && selectedIds.length) return apiError(res, 400, 'Выбор детей доступен только родителю');
+        if (actor.type === 6) {
+            const children = await getChildrenForParent(actor.id);
+            const available = new Set(children.map((child) => Number(child.id)));
+            if (!selectedIds.every((id) => available.has(id))) return apiError(res, 400, 'Можно выбрать только своих активных детей');
+        }
+        const enabled = req.body?.sync_enabled !== false;
+        const status = enabled ? 'active' : 'paused';
+        const nextSync = enabled ? nextGoogleSyncAt(interval, dailyTime) : null;
+        const db = await pool.getConnection();
+        try {
+            await db.beginTransaction();
+            await db.query(`
+                UPDATE google_calendar_connections
+                   SET status = ?, sync_interval_minutes = ?, daily_sync_time = ?, next_sync_at = ?,
+                       sync_requested_at = CASE WHEN ? THEN ? ELSE NULL END, sync_lock_until = NULL,
+                       last_error_code = CASE WHEN ? THEN NULL ELSE last_error_code END,
+                       last_error_message = CASE WHEN ? THEN NULL ELSE last_error_message END
+                 WHERE id = ? AND user_id = ?
+            `, [status, interval, dailyTime, nextSync, enabled ? 1 : 0, enabled ? moscowSqlDateTime() : null,
+                enabled ? 1 : 0, enabled ? 1 : 0, connection.id, actor.id]);
+            if (actor.type === 6) {
+                await db.query('DELETE FROM google_calendar_connection_subjects WHERE connection_id = ?', [connection.id]);
+                if (selectedIds.length) await db.query(
+                    `INSERT INTO google_calendar_connection_subjects (connection_id, subject_user_id) VALUES ${selectedIds.map(() => '(?, ?)').join(', ')}`,
+                    selectedIds.flatMap((id) => [connection.id, id])
+                );
+            }
+            await db.commit();
+        } catch (error) {
+            await db.rollback();
+            throw error;
+        } finally { db.release(); }
+        if (enabled) void syncGoogleCalendarConnection(connection.id, 'event_change');
+        res.json({ success: true, ...(await googleConnectionWorkspace(actor)) });
+    } catch (error) {
+        mlog('[ERROR]', 'Настройки Google Calendar', error.code || error.message);
+        apiError(res, 400, error.message || 'Не удалось сохранить настройки Google Calendar');
+    }
+});
+
+app.post('/api/integrations/google-calendar/sync', requireApiAuth, requireSameOrigin, async (req, res) => {
+    try {
+        if (!googleCalendarConfigured()) return apiError(res, 503, 'Интеграция Google Calendar пока не настроена');
+        const connection = await currentGoogleConnection(user(req).id);
+        if (!connection || connection.status !== 'active') return apiError(res, 400, 'Подключение должно быть активно для синхронизации');
+        await pool.query('UPDATE google_calendar_connections SET sync_requested_at = ? WHERE id = ?', [moscowSqlDateTime(), connection.id]);
+        const summary = await syncGoogleCalendarConnection(connection.id, 'manual');
+        res.json({ success: true, started: Boolean(summary), summary: summary || null });
+    } catch (error) {
+        mlog('[ERROR]', 'Ручная синхронизация Google Calendar', error.code || error.message);
+        apiError(res, 400, 'Не удалось запустить синхронизацию Google Calendar');
+    }
+});
+
+app.post('/api/integrations/google-calendar/disconnect', requireApiAuth, requireSameOrigin, async (req, res) => {
+    try {
+        if (!googleCalendarConfigured()) return apiError(res, 503, 'Интеграция Google Calendar пока не настроена');
+        const connection = await currentGoogleConnection(user(req).id);
+        if (!connection || connection.status === 'disconnected') return apiError(res, 404, 'Google Calendar не подключён');
+        let revokeFailed = false;
+        try {
+            if (connection.refresh_token_ciphertext) await revokeGoogleRefreshToken(decryptGoogleRefreshToken(connection));
+        } catch (error) {
+            revokeFailed = true;
+            mlog('[ERROR]', 'Отзыв Google Calendar token', googleErrorDetails(error).message);
+        }
+        await pool.query(`
+            UPDATE google_calendar_connections
+               SET status = 'disconnected', token_key_version = NULL, refresh_token_ciphertext = NULL,
+                   refresh_token_iv = NULL, refresh_token_tag = NULL, sync_requested_at = NULL,
+                   next_sync_at = NULL, sync_lock_until = NULL, last_error_code = NULL, last_error_message = NULL
+             WHERE id = ? AND user_id = ?
+        `, [connection.id, user(req).id]);
+        res.json({ success: true, revoke_failed: revokeFailed });
+    } catch (error) {
+        mlog('[ERROR]', 'Отключение Google Calendar', error.code || error.message);
+        apiError(res, 400, 'Не удалось отключить Google Calendar');
+    }
+});
+
 app.get('/api/event-form-options', requireApiAuth, requirePermission('create_event'), async (req, res) => {
     try {
         const options = await formData();
@@ -1615,6 +2268,7 @@ app.post('/api/events/:id/register', requireApiAuth, async (req, res) => {
         const participantId = await participantForRequest(req, event);
         await assertActiveUsers([participantId]);
         await pool.query('INSERT INTO event_participants (event_id, user_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE registered_at = registered_at', [event.id, participantId]);
+        await requestGoogleCalendarSyncForParticipant(participantId);
         res.json({ success: true, participant_id: participantId });
     } catch (error) { apiError(res, 400, error.message || 'Ошибка записи'); }
 });
@@ -1635,6 +2289,7 @@ app.post('/api/events/:id/unregister', requireApiAuth, async (req, res) => {
         if (!event || !(await eventVisibleTo(event, user(req)))) return apiError(res, 404, 'Мероприятие не найдено');
         const participantId = await participantForRequest(req, event);
         await pool.query('DELETE FROM event_participants WHERE event_id = ? AND user_id = ?', [event.id, participantId]);
+        await requestGoogleCalendarSyncForParticipant(participantId);
         res.json({ success: true });
     } catch (error) { apiError(res, 400, error.message || 'Ошибка отмены записи'); }
 });
@@ -1695,6 +2350,7 @@ app.post('/events/cancel/:id', requirePageAuth, requirePermission('cancel_event'
         const [participants] = await pool.query('SELECT user_id FROM event_participants WHERE event_id = ?', [event.id]);
         await Promise.all(participants.filter((item) => item.user_id !== event.created_by).map((item) => createNotification(item.user_id, event.id, 'canceled', `Мероприятие «${event.title}» отменено. Причина: ${reason}`)));
         await notifyAdmins(event.id, 'canceled', `Мероприятие «${event.title}» отменено администратором ${user(req).name}.`, user(req).id);
+        await requestGoogleCalendarSyncForEventChange();
         workspaceRedirect(req, res, { event: event.id, scope: 'archive' });
     } catch (error) { pageError(res, 500, 'Ошибка сервера'); }
 });
