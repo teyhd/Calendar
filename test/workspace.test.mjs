@@ -9,7 +9,8 @@ const {
     workspaceDefaultView,
     workspaceNavigation,
     workspaceScopeForView,
-    normalizeWorkspaceView
+    normalizeWorkspaceView,
+    eventVisibleTo
 } = await import('../app.js');
 
 test('workspace status filter uses the database WAITING_ADMIN value and accepts the old alias', () => {
@@ -37,6 +38,13 @@ test('workspace default and visible navigation are role-adaptive', () => {
     assert.equal(normalizeWorkspaceView('moderation', teacher), 'calendar');
     assert.ok(workspaceNavigation(parent).some((item) => item.view === 'children'));
     assert.ok(workspaceNavigation(admin, { pendingCount: 2 }).some((item) => item.view === 'moderation' && item.count === 2));
+});
+
+test('administrator calendar visibility includes every event status', async () => {
+    const admin = { id: 5, type: 5, permissions: { moderate_event: true } };
+    for (const status of ['DRAFT', 'WAITING_ADMIN', 'APPROVED', 'REJECTED', 'CANCELED', 'COMPLETED']) {
+        assert.equal(await eventVisibleTo({ created_by: 99, status, is_admin_event: 0 }, admin), true, status);
+    }
 });
 
 test('an event is published only when no assigned administrator is still pending', () => {

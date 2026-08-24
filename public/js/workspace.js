@@ -140,6 +140,37 @@
         </button>`;
     }
 
+    function calendarApprovalQueueMarkup(data) {
+        const items = data.items || [];
+        const total = Number(data.total || 0);
+        if (!items.length) return '';
+        const rows = items.map((event) => `<article class="calendar-approval-item">
+            <button class="calendar-approval-open" type="button" data-open-event="${Number(event.id)}">
+                <span><strong>${escapeHtml(event.title)}</strong><small>${formatDate(event.start_datetime)}${event.creator_name ? ` · ${escapeHtml(event.creator_name)}` : ''}</small></span>
+                <span class="app-status app-status-waiting">На модерации</span>
+            </button>
+            <button class="app-btn app-btn-primary" type="button" data-workspace-command="approve" data-event-id="${Number(event.id)}" aria-label="Утвердить: ${escapeHtml(event.title)}">Утвердить</button>
+        </article>`).join('');
+        const more = total > items.length
+            ? `<a class="app-btn app-btn-secondary" href="/?view=moderation" data-workspace-view="moderation">Вся очередь · ${total}</a>`
+            : '';
+        return `<div class="calendar-approval-head"><div><p class="app-page-kicker">Быстрое решение</p><h2>Ожидают вашего подтверждения</h2><p>Все статусы видны в календаре. Утверждение учитывается вместе с решениями остальных администраторов.</p></div><span class="app-nav-count">${total}</span></div><div class="calendar-approval-list">${rows}</div>${more ? `<div class="calendar-approval-more">${more}</div>` : ''}`;
+    }
+
+    async function renderCalendarApprovalQueue() {
+        const queue = document.getElementById('calendarApprovalQueue');
+        if (!queue || !can('moderate_event')) return;
+        try {
+            const data = await request('/api/workspace/events?view=calendar&status=WAITING_ADMIN&page=1&page_size=6&sort=start_asc');
+            const markup = calendarApprovalQueueMarkup(data);
+            queue.hidden = !markup;
+            queue.innerHTML = markup;
+        } catch (error) {
+            queue.hidden = false;
+            queue.innerHTML = '<p class="app-help">Не удалось загрузить заявки, ожидающие решения. Обновите страницу или откройте модерацию.</p>';
+        }
+    }
+
     function emptyMarkup(title = 'Ничего не найдено', text = 'Попробуйте изменить фильтры или вернитесь позже.') {
         return `<section class="app-empty"><h2>${title}</h2><p>${text}</p></section>`;
     }
@@ -151,7 +182,7 @@
 
     async function renderCalendar() {
         const area = content();
-        area.innerHTML = `${filterMarkup()}<section class="calendar-workspace"><div class="calendar-workspace-grid"><div class="app-surface app-surface-pad"><div id="calendar"></div></div><aside class="app-surface app-agenda" aria-label="Ближайшие события"><div class="app-section-head"><h2>Ближайшее</h2><span id="agendaCount" class="app-help"></span></div><div id="agendaList" class="app-event-list"><div class="app-modal-loading"><span class="app-spinner" aria-hidden="true"></span><div>Загрузка…</div></div></div></aside></div></section>`;
+        area.innerHTML = `${filterMarkup()}<section class="calendar-approval-queue app-surface" id="calendarApprovalQueue" aria-live="polite" hidden></section><section class="calendar-workspace"><div class="calendar-workspace-grid"><div class="app-surface app-surface-pad"><div id="calendar"></div></div><aside class="app-surface app-agenda" aria-label="Ближайшие события"><div class="app-section-head"><h2>Ближайшее</h2><span id="agendaCount" class="app-help"></span></div><div id="agendaList" class="app-event-list"><div class="app-modal-loading"><span class="app-spinner" aria-hidden="true"></span><div>Загрузка…</div></div></div></aside></div></section>`;
         selectFilters(area);
         const onEvents = (items) => {
             const agenda = document.getElementById('agendaList');
@@ -162,6 +193,7 @@
         state.calendar?.destroy();
         state.calendar = window.calendarUI?.mountCalendar(document.getElementById('calendar'), { view: state.view, filters: state.filters, onEvents }) || null;
         window.calendar = state.calendar;
+        await renderCalendarApprovalQueue();
     }
 
     async function renderList() {
