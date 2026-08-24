@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import http from 'node:http';
 import test from 'node:test';
 
 process.env.NODE_ENV = 'test';
@@ -10,8 +11,27 @@ const {
     workspaceNavigation,
     workspaceScopeForView,
     normalizeWorkspaceView,
-    eventVisibleTo
+    eventVisibleTo,
+    app
 } = await import('../app.js');
+
+test('privacy policy is available without an SSO session', async (t) => {
+    const server = http.createServer(app);
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    t.after(() => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve())));
+    const { port } = server.address();
+    const response = await new Promise((resolve, reject) => {
+        http.get(`http://127.0.0.1:${port}/privacy`, (res) => {
+            let body = '';
+            res.setEncoding('utf8');
+            res.on('data', (chunk) => { body += chunk; });
+            res.on('end', () => resolve({ status: res.statusCode, body }));
+        }).on('error', reject);
+    });
+    assert.equal(response.status, 200);
+    assert.match(response.body, /Политика конфиденциальности/);
+    assert.match(response.body, /календарями, которые созданы этим приложением/);
+});
 
 test('workspace status filter uses the database WAITING_ADMIN value and accepts the old alias', () => {
     assert.equal(normalizedEventStatus('WAITING'), 'WAITING_ADMIN');

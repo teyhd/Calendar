@@ -1491,6 +1491,13 @@ if (process.env.NODE_ENV !== 'test') {
     cron.schedule('* * * * *', runDueGoogleCalendarSyncs);
 }
 
+app.get('/privacy', (_req, res) => {
+    res.status(200).render('privacy', {
+        layout: false,
+        title: 'Политика конфиденциальности'
+    });
+});
+
 app.get('/', requirePageAuth, async (req, res) => {
     try {
         const actor = user(req);
