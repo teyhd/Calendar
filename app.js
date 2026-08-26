@@ -1498,6 +1498,13 @@ app.get('/privacy', (_req, res) => {
     });
 });
 
+app.get('/terms', (_req, res) => {
+    res.status(200).render('terms', {
+        layout: false,
+        title: 'Условия использования'
+    });
+});
+
 app.get('/', requirePageAuth, async (req, res) => {
     try {
         const actor = user(req);
