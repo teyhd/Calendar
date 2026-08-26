@@ -869,20 +869,20 @@ function audienceMatchesGoogleSubject(event, subject) {
     return false;
 }
 
-export function googleSyncEligibility(event, owner, subjects, registeredIds = []) {
+export function googleSyncEligibility(event, owner, subjects, participantIds = []) {
     if (!owner || !subjects?.length) return null;
-    if (Number(event.is_admin_event)) return owner.type === 5 ? { subjectNames: [owner.name] } : null;
-    const registered = new Set(registeredIds.map(Number));
-    const ownerIsResponsible = owner.type !== 6 && parseIdList(event.responsible_ids).some((id) => sameUserId(id, owner.id));
+    if (event.status && event.status !== 'APPROVED') return null;
+    if (Number(event.is_admin_event)) {
+        const assignedAdmin = owner.type === 5 && parseIdList(event.responsible_ids).some((id) => sameUserId(id, owner.id));
+        return assignedAdmin ? { subjectNames: [owner.name] } : null;
+    }
+    const participants = new Set(participantIds.map(Number));
     const matchingSubjects = subjects.filter((subject) => Number(event.is_registration_enabled)
-        ? registered.has(Number(subject.id))
-        : registered.has(Number(subject.id)) || audienceMatchesGoogleSubject(event, subject));
-    if (!ownerIsResponsible && !matchingSubjects.length) return null;
+        ? participants.has(Number(subject.id))
+        : participants.has(Number(subject.id)) || audienceMatchesGoogleSubject(event, subject));
+    if (!matchingSubjects.length) return null;
     return {
-        subjectNames: [...new Set([
-            ...(ownerIsResponsible ? [owner.name] : []),
-            ...matchingSubjects.map((subject) => subject.name)
-        ])]
+        subjectNames: [...new Set(matchingSubjects.map((subject) => subject.name))]
     };
 }
 
