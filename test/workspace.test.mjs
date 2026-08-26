@@ -20,17 +20,21 @@ test('privacy policy is available without an SSO session', async (t) => {
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
     t.after(() => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve())));
     const { port } = server.address();
-    const response = await new Promise((resolve, reject) => {
-        http.get(`http://127.0.0.1:${port}/privacy`, (res) => {
+    const requestPublicPage = (pathname) => new Promise((resolve, reject) => {
+        http.get(`http://127.0.0.1:${port}${pathname}`, (res) => {
             let body = '';
             res.setEncoding('utf8');
             res.on('data', (chunk) => { body += chunk; });
             res.on('end', () => resolve({ status: res.statusCode, body }));
         }).on('error', reject);
     });
-    assert.equal(response.status, 200);
-    assert.match(response.body, /Политика конфиденциальности/);
-    assert.match(response.body, /календарями, которые созданы этим приложением/);
+    const [privacy, terms] = await Promise.all([requestPublicPage('/privacy'), requestPublicPage('/terms')]);
+    assert.equal(privacy.status, 200);
+    assert.match(privacy.body, /Политика конфиденциальности/);
+    assert.match(privacy.body, /Сервис не читает, не копирует и не изменяет основной/);
+    assert.match(privacy.body, /calendar\.app\.created/);
+    assert.equal(terms.status, 200);
+    assert.match(terms.body, /Условия использования/);
 });
 
 test('workspace status filter uses the database WAITING_ADMIN value and accepts the old alias', () => {
