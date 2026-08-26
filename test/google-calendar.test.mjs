@@ -41,6 +41,12 @@ test('Google eligibility uses audience for ordinary events and registration for 
     const registrationEvent = { ...classEvent, is_registration_enabled: 1 };
     assert.equal(googleSyncEligibility(registrationEvent, student, [student]), null);
     assert.deepEqual(googleSyncEligibility(registrationEvent, student, [student], [11]), { subjectNames: ['Ученик'] });
+
+    const draftEvent = { ...classEvent, status: 'WAITING_ADMIN' };
+    assert.equal(googleSyncEligibility(draftEvent, student, [student]), null);
+
+    const creatorWithoutParticipation = { ...classEvent, target_audience_id: '8', responsible_ids: '11' };
+    assert.equal(googleSyncEligibility(creatorWithoutParticipation, student, [student]), null);
 });
 
 test('parent sync uses only selected children while administrative events stay with administrators', () => {
@@ -49,9 +55,10 @@ test('parent sync uses only selected children while administrative events stay w
     const specific = { target_audience_type: 'specific_users', target_audience_id: '11', responsible_ids: '', is_registration_enabled: 0, is_admin_event: 0 };
     assert.deepEqual(googleSyncEligibility(specific, parent, [child]), { subjectNames: ['Ребёнок'] });
     assert.equal(googleSyncEligibility(specific, parent, []), null);
-    const adminEvent = { ...specific, is_admin_event: 1 };
+    const adminEvent = { ...specific, is_admin_event: 1, responsible_ids: '5' };
     assert.equal(googleSyncEligibility(adminEvent, parent, [child]), null);
     assert.deepEqual(googleSyncEligibility(adminEvent, { id: 5, type: 5, name: 'Админ' }, [{ id: 5, name: 'Админ' }]), { subjectNames: ['Админ'] });
+    assert.equal(googleSyncEligibility(adminEvent, { id: 6, type: 5, name: 'Другой админ' }, [{ id: 6, name: 'Другой админ' }]), null);
 });
 
 test('daily Google synchronization chooses the next Moscow wall-clock occurrence', () => {
