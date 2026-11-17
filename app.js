@@ -7,7 +7,8 @@ import { fileURLToPath } from 'url';
 import crypto from 'node:crypto';
 import dotenv from 'dotenv';
 import cron from 'node-cron';
-import pool from './vendor/db.mjs';
+import pool, { ssoPool } from './vendor/db.mjs';
+import { registerMainportalContext } from './vendor/mainportal-context.mjs';
 import { mlog } from './vendor/logs.js';
 import { registerHelpers } from './vendor/hlp.mjs';
 import {
@@ -137,6 +138,7 @@ app.engine('.hbs', engine({
 }));
 app.set('view engine', '.hbs');
 app.set('views', path.join(__dirname, 'views'));
+registerMainportalContext(app, express, pool, ssoPool);
 app.use(express.urlencoded({ extended: true, limit: '512kb' }));
 app.use(express.json({ limit: '512kb' }));
 app.use(cookieParser());
