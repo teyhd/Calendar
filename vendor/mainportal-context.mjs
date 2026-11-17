@@ -110,3 +110,32 @@ export function registerMainportalContext(app, express, calendar, directory) {
         } catch (error) { res.status(error.status || 503).json({ error: error.status ? error.message : 'calendar_unavailable' }); }
     });
 }
+
+// Single-event browser access uses the same active service-role authority as
+// the adapter. It grants neither list access nor unrelated administrative rights.
+export async function mainportalEventAccess(calendar, directory, actorId, event, serviceId) {
+    if (!positive(actorId) || !positive(serviceId) || !event) return { read: false, approve: false };
+    const [rights] = await directory.query(`SELECT DISTINCT r.role_id FROM users u JOIN rights r ON r.usr_id=u.id
+        JOIN srvs s ON s.id=r.srv_id JOIN srvs_roles sr ON sr.srvs_id=s.id AND sr.role_id=r.role_id
+        WHERE u.id=? AND u.lifecycle_state='active' AND s.id=? AND s.name='calendar' AND r.role_id IN (1,2,3,4,5,6)`, [actorId,serviceId]);
+    const roles=rights.map(row=>Number(row.role_id));
+    if (!roles.length) return {read:false,approve:false};
+    let approve=false;
+    if (roles.includes(5) && event.status==='WAITING_ADMIN') {
+        const [rows]=await calendar.query("SELECT id FROM event_approvals WHERE event_id=? AND user_id=? AND role_type='admin' AND status='pending' LIMIT 1",[event.id,actorId]);
+        approve=rows.length>0;
+    }
+    if (Number(event.created_by)===actorId || approve) return {read:true,approve};
+    if (event.status!=='APPROVED' || Number(event.is_admin_event) && !roles.includes(5)) return {read:false,approve};
+    if (roles.some(role=>[2,3,4,5].includes(role)) && String(event.responsible_ids||'').split(',').map(Number).includes(actorId)) return {read:true,approve};
+    const [participants]=await calendar.query('SELECT user_id FROM event_participants WHERE event_id=?',[event.id]);
+    if (participants.some(row=>Number(row.user_id)===actorId)) return {read:true,approve};
+    if (roles.includes(6)) {
+        const [children]=await directory.query(`SELECT DISTINCT u.id FROM parents_kids pk JOIN users u ON u.id=pk.kid_id
+            WHERE pk.parent_id=? AND u.lifecycle_state='active' AND u.type=1
+            AND EXISTS (SELECT 1 FROM rights r JOIN srvs_roles sr ON sr.srvs_id=r.srv_id AND sr.role_id=r.role_id
+                WHERE r.usr_id=u.id AND r.srv_id=? AND r.role_id=1)`,[actorId,serviceId]);
+        return {read:children.some(child=>participants.some(row=>Number(row.user_id)===Number(child.id))),approve};
+    }
+    return {read:false,approve};
+}

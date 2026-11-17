@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { readMainportalRequest, loadMainportalContext } from '../vendor/mainportal-context.mjs';
+import { readMainportalRequest, loadMainportalContext, mainportalEventAccess } from '../vendor/mainportal-context.mjs';
 
 const now = new Date('2026-11-17T09:00:00Z');
 const input = { schema: 1, actorId: 10, date: '2026-11-17', context: 'personal', childId: 20, lessonRefs: [] };
@@ -45,4 +45,19 @@ test('foreign child, missing role, school privilege fail before domain reads', a
     await assert.rejects(loadMainportalContext(calendar,directory,{...input,childId:99},{serviceId:9}), /child_forbidden/);
     await assert.rejects(loadMainportalContext(calendar,directory,{...input,context:'school'},{serviceId:9}), /context_forbidden/);
     await assert.rejects(loadMainportalContext(calendar,{query:async()=>[[]]},input,{serviceId:9}), /context_forbidden/);
+});
+test('single-event link resolves a staff-parent child without broadening list or mutation permissions',async()=>{
+    const directory={query:async sql=>[sql.includes('parents_kids')?[{id:20}]:[{role_id:2},{role_id:6}]]};
+    const calendar={query:async()=>[[{user_id:20}]]};
+    const event={id:7,status:'APPROVED',created_by:40,responsible_ids:'40',is_admin_event:0};
+    assert.deepEqual(await mainportalEventAccess(calendar,directory,10,event,9),{read:true,approve:false});
+    assert.deepEqual(await mainportalEventAccess({query:async()=>[[{user_id:99}]]},directory,10,event,9),{read:false,approve:false});
+    assert.deepEqual(await mainportalEventAccess(calendar,directory,10,{...event,is_admin_event:1},9),{read:false,approve:false});
+    assert.deepEqual(await mainportalEventAccess(calendar,{query:async()=>[[]]},10,event,9),{read:false,approve:false});
+});
+test('approval requires both current admin service role and this event assignment',async()=>{
+    const directory={query:async()=>[[{role_id:2},{role_id:5}]]};
+    const event={id:7,status:'WAITING_ADMIN',created_by:40};
+    assert.deepEqual(await mainportalEventAccess({query:async()=>[[{id:1}]]},directory,10,event,9),{read:true,approve:true});
+    assert.deepEqual(await mainportalEventAccess({query:async()=>[[]]},directory,10,event,9),{read:false,approve:false});
 });

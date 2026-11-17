@@ -8,7 +8,7 @@ import crypto from 'node:crypto';
 import dotenv from 'dotenv';
 import cron from 'node-cron';
 import pool, { ssoPool } from './vendor/db.mjs';
-import { registerMainportalContext } from './vendor/mainportal-context.mjs';
+import { registerMainportalContext, mainportalEventAccess } from './vendor/mainportal-context.mjs';
 import { mlog } from './vendor/logs.js';
 import { registerHelpers } from './vendor/hlp.mjs';
 import {
@@ -1958,7 +1958,15 @@ app.get('/events/moderation/result/:id', requirePageAuth, requirePermission('mod
     } catch (error) { pageError(res, 500, 'Не удалось получить результат модерации'); }
 });
 
-app.post('/events/admin-approve/:id', requirePageAuth, requirePermission('moderate_event'), async (req, res) => {
+async function requireAssignedEventApproval(req,res,next) {
+    try {
+        const access=await mainportalEventAccess(pool,ssoPool,Number(user(req).id),await getEvent(req.params.id),Number(process.env.SSO_SERVICE_ID));
+        if (!access.approve) return pageError(res,403,'Нет назначенного согласования');
+        return next();
+    } catch { return pageError(res,503,'Не удалось проверить доступ'); }
+}
+
+app.post('/events/admin-approve/:id', requirePageAuth, requireAssignedEventApproval, async (req, res) => {
     const eventId = Number(req.params.id);
     try {
         const connection = await pool.getConnection();
@@ -1998,7 +2006,7 @@ app.post('/events/admin-approve/:id', requirePageAuth, requirePermission('modera
     } catch (error) { pageError(res, 400, error.message || 'Ошибка сервера'); }
 });
 
-app.post('/events/reject/:id', requirePageAuth, requirePermission('moderate_event'), async (req, res) => {
+app.post('/events/reject/:id', requirePageAuth, requireAssignedEventApproval, async (req, res) => {
     const eventId = Number(req.params.id);
     const reason = String(req.body.rejection_reason || '').trim().slice(0, 500) || 'Без указания причины';
     try {
@@ -2254,15 +2262,17 @@ app.post('/api/notifications/:id/read', requireApiAuth, async (req, res) => {
 app.get('/api/events/:id', requireApiAuth, async (req, res) => {
     try {
         const event = await getEvent(req.params.id);
-        if (!event || !(await eventVisibleTo(event, user(req)))) return apiError(res, 404, 'Мероприятие не найдено');
-        res.json((await enrichEvents([event]))[0]);
+        const access=await mainportalEventAccess(pool,ssoPool,Number(user(req).id),event,Number(process.env.SSO_SERVICE_ID));
+        if (!event || !access.read && !(await eventVisibleTo(event, user(req)))) return apiError(res, 404, 'Мероприятие не найдено');
+        res.json({...((await enrichEvents([event]))[0]), can_approve_assigned:access.approve});
     } catch (error) { apiError(res, 500, 'Ошибка сервера'); }
 });
 
 app.get('/api/events/:id/approvals', requireApiAuth, async (req, res) => {
     try {
         const event = await getEvent(req.params.id);
-        if (!event || !(await eventVisibleTo(event, user(req)))) return apiError(res, 404, 'Мероприятие не найдено');
+        const access=await mainportalEventAccess(pool,ssoPool,Number(user(req).id),event,Number(process.env.SSO_SERVICE_ID));
+        if (!event || !access.read && !(await eventVisibleTo(event, user(req)))) return apiError(res, 404, 'Мероприятие не найдено');
         res.json((await approvalsForEvents([event.id])).get(event.id) || []);
     } catch (error) { apiError(res, 500, 'Ошибка сервера'); }
 });

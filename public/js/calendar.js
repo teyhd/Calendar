@@ -118,8 +118,8 @@
         if (isOwner && event.status === 'REJECTED') actions.push(commandButton('resend', event.id, 'Отправить повторно', 'app-btn app-btn-secondary'));
         if ((isOwner || isAdmin) && event.status === 'APPROVED') actions.push(commandButton('complete', event.id, 'Завершить', 'app-btn app-btn-primary'));
         if (isOwner && ['WAITING_ADMIN', 'REJECTED'].includes(event.status)) actions.push(commandButton('delete', event.id, 'Удалить', 'app-btn app-btn-danger'));
-        if (isAdmin && event.status === 'WAITING_ADMIN') actions.push(commandButton('approve', event.id, 'Подтвердить', 'app-btn app-btn-primary'));
-        if (isAdmin && event.status === 'WAITING_ADMIN') actions.push(commandButton('reject', event.id, 'Отклонить', 'app-btn app-btn-danger'));
+        if (event.can_approve_assigned && event.status === 'WAITING_ADMIN') actions.push(commandButton('approve', event.id, 'Подтвердить', 'app-btn app-btn-primary'));
+        if (event.can_approve_assigned && event.status === 'WAITING_ADMIN') actions.push(commandButton('reject', event.id, 'Отклонить', 'app-btn app-btn-danger'));
         if (isAdmin && ['APPROVED', 'WAITING_ADMIN'].includes(event.status)) actions.push(commandButton('cancel', event.id, 'Отменить', 'app-btn app-btn-danger'));
         if ((isOwner || isAdmin) && event.status === 'COMPLETED') actions.push(commandButton('review', event.id, event.review_text ? 'Изменить отзыв' : 'Добавить отзыв', 'app-btn app-btn-secondary'));
         return actions.join('');
