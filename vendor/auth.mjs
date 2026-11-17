@@ -50,12 +50,8 @@ export async function loadAuthUser(req) {
     if (!raw || !cfg.sessionSecret) return null;
     const payload = verifySignedValue(raw, cfg.sessionSecret);
     if (!payload || Number(payload.exp || 0) <= Math.floor(Date.now() / 1_000)) return null;
-    const roleId = Number(payload.role_id);
-    if (!allowedRoles.has(roleId)) return null;
-    const { getActiveUserById } = await import('./sso.mjs');
-    const directoryUser = await getActiveUserById(payload.uid);
-    if (!directoryUser || directoryUser.type !== roleId) return null;
-    return { ...directoryUser, permissions: calendarPermissions(roleId), raw_role_id: roleId };
+    const { getCalendarAuthIdentity } = await import('./sso.mjs');
+    return resolveCalendarSessionActor(payload,await getCalendarAuthIdentity(payload.uid));
 }
 
 export async function attachAuthUser(req, res, next) {
@@ -115,7 +111,7 @@ async function authCallbackHandler(req, res) {
     }
     try {
         const token = await exchangeCodeForToken(code, cfg);
-        const session = buildSessionFromToken(token, cfg);
+        const session = await buildAuthorizedCalendarSession(token, cfg);
         clearAuthCookies(req, res);
         res.cookie(cfg.sessionCookieName, session, cookieOptions(req, { maxAge: cfg.sessionTTL }));
         res.clearCookie(stateCookieName, cookieOptions(req));
@@ -183,12 +179,42 @@ export function verifyHS256JWT(token, secret) {
     return claims;
 }
 
-export function buildSessionFromToken(token, cfg = getAuthConfig()) {
+export function buildSessionFromToken(token, cfg = getAuthConfig(), identity = null) {
     const claims = verifyHS256JWT(token, cfg.jwtSecret);
     if (String(claims.aud || '') !== cfg.clientID) throw new Error('jwt audience mismatch');
     const roleId = extractServiceRoleID(claims.right, cfg.serviceID);
     if (!allowedRoles.has(roleId) || !Number(claims.sub)) throw new Error('no calendar role');
-    return signValue({ uid: Number(claims.sub), role_id: roleId, exp: Math.floor((Date.now() + cfg.sessionTTL) / 1_000) }, cfg.sessionSecret);
+    const payload={ uid: Number(claims.sub), role_id: roleId, exp: Math.floor((Date.now() + cfg.sessionTTL) / 1_000) };
+    if (identity) {
+        payload.claimed_roles=[...new Set(claims.right.filter(row=>{
+            const explicit=Object.prototype.hasOwnProperty.call(row||{},'srv_id');
+            return !explicit||Number(row.srv_id)===Number(cfg.serviceID);
+        }).map(row=>Number.isInteger(row)?row:Number(row?.role_id)).filter(role=>allowedRoles.has(role)))];
+        const actor=resolveCalendarSessionActor(payload,identity);
+        if (!actor) throw new Error('no active calendar role');
+        payload.role_id=actor.type;
+        payload.roles=actor.roles;
+    }
+    return signValue(payload,cfg.sessionSecret);
+}
+
+export function resolveCalendarSessionActor(payload,identity) {
+    if (!identity || Number(identity.id)!==Number(payload.uid)) return null;
+    const roles=[...new Set((identity.roles||[]).map(Number).filter(role=>allowedRoles.has(role)))];
+    const claimed=Array.isArray(payload.claimed_roles)?payload.claimed_roles:[Number(payload.role_id)];
+    const grantedClaims=roles.filter(role=>claimed.includes(role));
+    if (!grantedClaims.length) return null;
+    const roleId=roles.includes(Number(identity.type))?Number(identity.type):grantedClaims.sort((a,b)=>b-a)[0];
+    return {...identity,type:roleId,roles,permissions:calendarPermissions(roleId),raw_role_id:roleId};
+}
+
+export async function buildAuthorizedCalendarSession(token,cfg=getAuthConfig(),loader=null) {
+    const claims=verifyHS256JWT(token,cfg.jwtSecret);
+    if (String(claims.aud||'')!==cfg.clientID) throw new Error('jwt audience mismatch');
+    const load=loader||(await import('./sso.mjs')).getCalendarAuthIdentity;
+    const identity=await load(Number(claims.sub));
+    if (!identity) throw new Error('no active calendar role');
+    return buildSessionFromToken(token,cfg,identity);
 }
 
 export function readSignedSession(value, secret) {

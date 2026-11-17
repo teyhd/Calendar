@@ -88,6 +88,21 @@ export async function getActiveUserById(userId) {
     return rows[0] ? mapPerson(rows[0]) : null;
 }
 
+// Authentication only: directory identity plus all currently granted Calendar
+// roles. Other directory listings keep their existing primary-role policies.
+export async function getCalendarAuthIdentity(userId) {
+    const id=Number(userId);
+    if (!Number.isSafeInteger(id)||id<=0) return null;
+    const [rows]=await ssoPool.query(`SELECT ${PERSON_FIELDS},r.role_id AS granted_role
+        FROM users u ${PERSON_JOINS}
+        JOIN rights r ON r.usr_id=u.id JOIN srvs s ON s.id=r.srv_id
+        JOIN srvs_roles sr ON sr.srvs_id=s.id AND sr.role_id=r.role_id
+        WHERE u.id=? AND u.lifecycle_state='active' AND s.id=? AND s.name='calendar'
+        AND r.role_id IN (1,2,3,4,5,6)`,[id,calendarServiceId()]);
+    if (!rows.length) return null;
+    return {...mapPerson(rows[0]),roles:[...new Set(rows.map(row=>Number(row.granted_role)))]};
+}
+
 export async function getActiveUsersByIds(ids) {
     const normalized = uniquePositiveIds(ids);
     if (!normalized.length) return [];

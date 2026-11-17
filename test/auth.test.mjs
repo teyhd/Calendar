@@ -4,6 +4,8 @@ import test from 'node:test';
 import {
     buildLogoutURL,
     buildSessionFromToken,
+    buildAuthorizedCalendarSession,
+    resolveCalendarSessionActor,
     calendarPermissions,
     extractServiceRoleID,
     readSignedSession,
@@ -89,4 +91,26 @@ test('logout points to SSO and all supported roles have the intended permissions
     assert.equal(calendarPermissions(-1).use_calendar, false);
     assert.equal(calendarPermissions(6).view_children, true);
     assert.equal(calendarPermissions(5).moderate_event, true);
+});
+
+test('fresh teacher-parent login keeps primary permissions and authoritative roles',async()=>{
+    const identity={id:100,type:2,roles:[2,6],name:'Fixture'};
+    const value=await buildAuthorizedCalendarSession(token(claims({right:[2,6]})),cfg,async()=>identity);
+    const payload=readSignedSession(value,sessionSecret);
+    assert.equal(payload.role_id,2);
+    assert.deepEqual(payload.roles,[2,6]);
+    const actor=resolveCalendarSessionActor(payload,identity);
+    assert.equal(actor.type,2);
+    assert.equal(actor.permissions.moderate_event,false);
+    assert.equal(actor.permissions.view_children,false);
+    assert.deepEqual(actor.roles,[2,6]);
+    assert.equal(resolveCalendarSessionActor(payload,{...identity,roles:[]}),null);
+    assert.equal(resolveCalendarSessionActor(payload,{...identity,id:999}),null);
+});
+test('session authority rejects ungranted claims and falls back only to a granted claim',async()=>{
+    await assert.rejects(buildAuthorizedCalendarSession(token(claims({right:[5]})),cfg,async()=>({id:100,type:2,roles:[2,6]})),/no active calendar role/);
+    const value=await buildAuthorizedCalendarSession(token(claims({right:[6]})),cfg,async()=>({id:100,type:2,roles:[6]}));
+    assert.equal(readSignedSession(value,sessionSecret).role_id,6);
+    const old={uid:100,role_id:2};
+    assert.equal(resolveCalendarSessionActor(old,{id:100,type:2,roles:[6]}),null);
 });
