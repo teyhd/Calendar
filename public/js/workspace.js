@@ -49,8 +49,9 @@
     function urlState() {
         const url = new URL(window.location.href);
         const legacy = url.searchParams.get('scope') || url.searchParams.get('panel');
-        const rawView = url.searchParams.get('view') || LEGACY_VIEWS[legacy] || legacy || state.bootstrap?.default_view || 'calendar';
-        const allowed = rawView === 'calendar' || state.bootstrap?.navigation?.some((item) => item.view === rawView);
+        const child = state.bootstrap?.selected_child;
+        const rawView = child ? 'children' : url.searchParams.get('view') || LEGACY_VIEWS[legacy] || legacy || state.bootstrap?.default_view || 'calendar';
+        const allowed = Boolean(child) || rawView === 'calendar' || state.bootstrap?.navigation?.some((item) => item.view === rawView);
         const view = allowed && VIEWS[rawView] ? rawView : 'calendar';
         return {
             view: VIEWS[view] ? view : 'calendar',
@@ -91,10 +92,10 @@
         const titleNode = document.getElementById('workspaceTitle');
         const summaryNode = document.getElementById('workspaceSummary');
         if (titleNode) titleNode.textContent = title;
-        if (summaryNode) summaryNode.textContent = summary;
+        if (summaryNode) summaryNode.textContent = state.bootstrap?.selected_child?.name || summary;
         const actions = document.getElementById('workspaceActions');
         if (!actions) return;
-        const create = can('create_event') ? '<button class="app-btn app-btn-primary" type="button" data-compose="create">Создать мероприятие</button>' : '';
+        const create = !state.bootstrap?.selected_child && can('create_event') ? '<button class="app-btn app-btn-primary" type="button" data-compose="create">Создать мероприятие</button>' : '';
         const contextual = state.view === 'notifications' && state.bootstrap?.unread_count
             ? '<button class="app-btn app-btn-secondary" type="button" data-mark-notifications>Прочитать всё</button>'
             : '';
@@ -179,6 +180,7 @@
 
     async function fetchEvents({ page = 1, pageSize = 30, view = state.view } = {}) {
         const params = new URLSearchParams({ view, page: String(page), page_size: String(pageSize), ...state.filters });
+        if (state.bootstrap?.selected_child) params.set('child_id', state.bootstrap.selected_child.id);
         return request(`/api/workspace/events?${params}`);
     }
 
@@ -560,7 +562,8 @@
     }
 
     async function refreshBootstrap() {
-        state.bootstrap = await request('/api/workspace');
+        const child = new URL(window.location.href).searchParams.get('child_id');
+        state.bootstrap = await request(child === null ? '/api/workspace' : `/api/workspace?child_id=${encodeURIComponent(child)}`);
         window.workspaceBootstrap = state.bootstrap;
         return state.bootstrap;
     }
@@ -583,6 +586,10 @@
     }
 
     async function navigate(view, { replace = false } = {}) {
+        if (state.bootstrap?.selected_child) {
+            window.location.assign(`/?view=${encodeURIComponent(view)}`);
+            return;
+        }
         const allowed = state.bootstrap?.navigation?.some((item) => item.view === view) || view === 'calendar';
         state.view = allowed && VIEWS[view] ? view : 'calendar';
         setURL({ view: state.view, event: null, compose: null }, { replace });
@@ -595,7 +602,7 @@
         state.filters = next.filters;
         if (replace) setURL({ view: state.view, ...state.filters }, { replace: true });
         await renderCurrent();
-        if (next.compose) openComposer(next.compose, next.event || null);
+        if (next.compose && !state.bootstrap?.selected_child) openComposer(next.compose, next.event || null);
         else if (next.event) window.openEventModal?.(next.event);
     }
 

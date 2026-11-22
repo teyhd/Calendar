@@ -71,7 +71,8 @@
         const modalBody = document.getElementById('eventModalBody');
         if (modalBody) modalBody.innerHTML = '<div class="app-modal-loading"><span class="app-spinner" aria-hidden="true"></span><div>Загрузка информации…</div></div>';
         openDialog('eventModal', opener);
-        request(`/api/events/${encodeURIComponent(eventId)}`)
+        const child = window.workspaceBootstrap?.selected_child;
+        request(`/api/events/${encodeURIComponent(eventId)}${child ? `?child_id=${child.id}` : ''}`)
             .then((eventData) => {
                 if (!window.calendarUI) throw new Error('Модуль календаря недоступен');
                 window.calendarUI.renderEvent(eventData);

@@ -137,9 +137,10 @@
             const status = STATUS[event.status] || STATUS.DRAFT;
             const userId = Number(window.currentUserId || 0);
             const role = Number(window.currentUserRole || 0);
-            const isOwner = Number(event.created_by) === userId;
-            const isAdmin = role === 5;
-            const registrationEnabled = event.is_registration_enabled === 1 || event.is_registration_enabled === true;
+            const familyView = Boolean(window.workspaceBootstrap?.selected_child);
+            const isOwner = !familyView && Number(event.created_by) === userId;
+            const isAdmin = !familyView && role === 5;
+            const registrationEnabled = (!familyView || role === 6) && [1, true].includes(event.is_registration_enabled);
             title.textContent = String(event.title || 'Мероприятие').slice(0, 90);
             body.innerHTML = `
                 <div class="app-detail-layout">

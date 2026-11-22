@@ -74,10 +74,16 @@ export async function attachAuthUser(req, res, next) {
 }
 
 export function requirePageAuth(req, res, next) {
+    const childId = req.path === '/' ? req.query?.child_id : undefined;
+    if (childId !== undefined && !validChildQuery(childId)) return res.status(400).send('Некорректный идентификатор ребёнка');
     if (req.authUser?.permissions?.use_calendar) return next();
     if (req.authUser) return res.status(403).send('Нет доступа к календарю');
     if (!authConfigured()) return res.status(503).send('SSO не настроен');
-    return res.redirect('/api/auth/login');
+    return res.redirect(childId ? `/api/auth/login?child_id=${childId}` : '/api/auth/login');
+}
+
+export function validChildQuery(value) {
+    return typeof value === 'string' && /^[1-9]\d*$/.test(value) && Number.isSafeInteger(Number(value));
 }
 
 export function requireApiAuth(req, res, next) {
@@ -98,8 +104,10 @@ async function authLoginHandler(req, res) {
     if (!authConfigured()) return res.status(503).json({ error: 'auth_not_configured' });
     const cfg = getAuthConfig();
     const state = crypto.randomBytes(24).toString('hex');
+    const childId = req.query.child_id;
+    if (childId !== undefined && !validChildQuery(childId)) return res.status(400).send('Некорректный идентификатор ребёнка');
     clearAuthCookies(req, res);
-    res.cookie(stateCookieName, state, cookieOptions(req, { maxAge: 10 * 60 * 1_000 }));
+    res.cookie(stateCookieName, childId ? `${state}.${childId}` : state, cookieOptions(req, { maxAge: 10 * 60 * 1_000 }));
     const url = new URL(`${cfg.ssoBaseURL}/authorize`);
     url.searchParams.set('client_id', cfg.clientID);
     url.searchParams.set('redirect_uri', cfg.callbackURL);
@@ -114,8 +122,8 @@ async function authCallbackHandler(req, res) {
     const cfg = getAuthConfig();
     const code = String(req.query.code || '').trim();
     const state = String(req.query.state || '').trim();
-    const storedState = String(req.cookies?.[stateCookieName] || '').trim();
-    if (!code || !stateMatches(state, storedState)) {
+    const [storedState, childId, ...extra] = String(req.cookies?.[stateCookieName] || '').trim().split('.');
+    if (!code || !stateMatches(state, storedState) || extra.length || childId !== undefined && !validChildQuery(childId)) {
         clearAuthCookies(req, res);
         return res.status(400).json({ error: 'state_mismatch' });
     }
@@ -125,7 +133,7 @@ async function authCallbackHandler(req, res) {
         clearAuthCookies(req, res);
         res.cookie(cfg.sessionCookieName, session, cookieOptions(req, { maxAge: cfg.sessionTTL }));
         res.clearCookie(stateCookieName, cookieOptions(req));
-        res.redirect('/');
+        res.redirect(childId ? `/?child_id=${childId}` : '/');
     } catch (error) {
         clearAuthCookies(req, res);
         return res.status(401).json({ error: 'auth_failed', detail: error.message || 'unknown' });

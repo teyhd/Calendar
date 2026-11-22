@@ -16,7 +16,8 @@ import {
     requireApiAuth,
     requirePageAuth,
     requirePermission,
-    setupAuthRoutes
+    setupAuthRoutes,
+    validChildQuery
 } from './vendor/auth.mjs';
 import {
     assertActiveUsers,
@@ -579,6 +580,10 @@ export async function eventVisibleTo(event, actor, children = null) {
     if (Number(event.is_admin_event)) return false;
     if (!visibleStatuses.has(event.status)) return false;
     const targets = actor.type === 6 ? (children || await getChildrenForParent(actor.id)) : [actor];
+    return eventTargetsPeople(event, targets);
+}
+
+function eventTargetsPeople(event, targets) {
     if (event.target_audience_type === 'all') return true;
     if (event.target_audience_type === 'specific_users') return eventAudienceIds(event).some((id) => targets.some((target) => target.id === id));
     if (event.target_audience_type === 'class') return targets.some((target) => Number(target.kaf) === Number(event.target_audience_id));
@@ -586,6 +591,27 @@ export async function eventVisibleTo(event, actor, children = null) {
     if (event.target_audience_type === 'department') return targets.some((target) => Number(target.kaf) === Number(event.target_audience_id));
     if (event.target_audience_type === 'parallel') return targets.some((target) => parallelFromName(target.kaf_name) === String(event.target_audience_id));
     return false;
+}
+
+async function loadSelectedChild(req, res, next) {
+    const value = req.query.child_id;
+    if (value === undefined) return next();
+    res.set('Cache-Control', 'private, no-store');
+    if (!validChildQuery(value)) return res.status(400).send('Некорректный идентификатор ребёнка');
+    const actor = user(req);
+    const children = actor.type === 6 || actor.roles?.includes(6) ? await getChildrenForParent(actor.id) : [];
+    req.calendarChild = children.find(child => child.id === Number(value));
+    if (!req.calendarChild) return res.status(403).send('Нет доступа к календарю этого ребёнка');
+    return next();
+}
+
+async function selectedChildEvents(child) {
+    const [events, [registrations]] = await Promise.all([
+        getEvents("WHERE e.status = 'APPROVED' AND COALESCE(e.is_admin_event, 0) = 0"),
+        pool.query('SELECT event_id FROM event_participants WHERE user_id = ?', [child.id])
+    ]);
+    const registered = new Set(registrations.map(row => Number(row.event_id)));
+    return events.filter(event => eventTargetsPeople(event, [child]) || registered.has(Number(event.id)));
 }
 
 async function visibleEventsFor(actor, { includeArchived = false } = {}) {
@@ -622,11 +648,11 @@ async function participantsByEvent(eventIds) {
     return result;
 }
 
-export async function workspaceEventsFor(actor, query = {}) {
+export async function workspaceEventsFor(actor, query = {}, child = null) {
     const view = normalizeWorkspaceView(query.view || query.scope || 'calendar', actor);
-    const scope = workspaceScopeForView(view);
+    const scope = child ? 'selected-child' : workspaceScopeForView(view);
     const needsArchive = ['archive', 'reviews'].includes(scope) || ['REJECTED', 'CANCELED', 'COMPLETED'].includes(normalizedEventStatus(query.status));
-    let events = await visibleEventsFor(actor, { includeArchived: needsArchive });
+    let events = child ? await selectedChildEvents(child) : await visibleEventsFor(actor, { includeArchived: needsArchive });
 
     if (scope === 'moderation') {
         events = actor.type === 5 ? (await getEvents("WHERE e.status = 'WAITING_ADMIN'")) : [];
@@ -679,8 +705,8 @@ export async function workspaceEventsFor(actor, query = {}) {
     });
 }
 
-export async function workspaceEventPageFor(actor, query = {}) {
-    const items = await workspaceEventsFor(actor, query);
+export async function workspaceEventPageFor(actor, query = {}, child = null) {
+    const items = await workspaceEventsFor(actor, query, child);
     const pageSize = Math.min(Math.max(Number(query.page_size) || 24, 1), 100);
     const page = Math.max(Number(query.page) || 1, 1);
     const start = (page - 1) * pageSize;
@@ -1507,7 +1533,7 @@ app.get('/terms', (_req, res) => {
     });
 });
 
-app.get('/', requirePageAuth, async (req, res) => {
+app.get('/', requirePageAuth, loadSelectedChild, async (req, res) => {
     try {
         const actor = user(req);
         const [[types], [pendingRows]] = await Promise.all([
@@ -1517,7 +1543,7 @@ app.get('/', requirePageAuth, async (req, res) => {
                 : Promise.resolve([[{ count: 0 }]])
         ]);
         const pendingCount = Number(pendingRows[0]?.count || 0);
-        const view = workspaceViewFromQuery(req.query, actor, pendingCount);
+        const view = req.calendarChild ? 'children' : workspaceViewFromQuery(req.query, actor, pendingCount);
         const navigation = workspaceNavigation(actor, { pendingCount, unreadCount: res.locals.unreadCount });
         const mobileNavigation = [
             navigation.find((item) => item.view === 'calendar'),
@@ -2065,26 +2091,26 @@ app.get('/analytics', requirePageAuth, requirePermission('view_analytics'), asyn
     workspaceRedirect(req, res, { panel: 'analytics' });
 });
 
-app.get('/api/events', requireApiAuth, async (req, res) => {
-    try { res.json(await workspaceEventsFor(user(req), req.query)); }
+app.get('/api/events', requireApiAuth, loadSelectedChild, async (req, res) => {
+    try { res.json(await workspaceEventsFor(user(req), req.query, req.calendarChild)); }
     catch (error) { mlog('[ERROR]', 'API событий', error.message); apiError(res, 500, 'Ошибка сервера'); }
 });
 
-app.get('/api/workspace/events', requireApiAuth, async (req, res) => {
-    try { res.json(await workspaceEventPageFor(user(req), req.query)); }
+app.get('/api/workspace/events', requireApiAuth, loadSelectedChild, async (req, res) => {
+    try { res.json(await workspaceEventPageFor(user(req), req.query, req.calendarChild)); }
     catch (error) { mlog('[ERROR]', 'API представления событий', error.message); apiError(res, 500, 'Не удалось загрузить события'); }
 });
 
-app.get('/api/workspace', requireApiAuth, async (req, res) => {
+app.get('/api/workspace', requireApiAuth, loadSelectedChild, async (req, res) => {
     try {
         const actor = user(req);
         const [types, allEvents, unreadRows] = await Promise.all([
             pool.query('SELECT id, name FROM event_types ORDER BY name').then(([rows]) => rows),
-            visibleEventsFor(actor, { includeArchived: true }),
+            req.calendarChild ? selectedChildEvents(req.calendarChild) : visibleEventsFor(actor, { includeArchived: true }),
             pool.query('SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND is_read = 0', [actor.id]).then(([rows]) => rows)
         ]);
         const [children, teachers] = await Promise.all([
-            actor.type === 6 ? getChildrenForParent(actor.id) : [],
+            req.calendarChild ? [req.calendarChild] : actor.type === 6 ? getChildrenForParent(actor.id) : [],
             actor.type === 5 ? listActiveUsers([2, 3, 4]) : []
         ]);
         const counts = {
@@ -2097,6 +2123,7 @@ app.get('/api/workspace', requireApiAuth, async (req, res) => {
         const unreadCount = Number(unreadRows[0]?.count || 0);
         res.json({
             user: { id: actor.id, name: actor.name, type: actor.type, role_name: actor.role_name, permissions: actor.permissions },
+            selected_child: req.calendarChild ? { id: req.calendarChild.id, name: req.calendarChild.name } : null,
             types,
             children: children.map((child) => ({ id: child.id, name: child.name, class_name: child.kaf_name || '' })),
             teachers: teachers.map((teacher) => ({ id: teacher.id, name: teacher.name })),
@@ -2259,9 +2286,17 @@ app.post('/api/notifications/:id/read', requireApiAuth, async (req, res) => {
     } catch (error) { apiError(res, 500, 'Не удалось обновить уведомление'); }
 });
 
-app.get('/api/events/:id', requireApiAuth, async (req, res) => {
+app.get('/api/events/:id', requireApiAuth, loadSelectedChild, async (req, res) => {
     try {
         const event = await getEvent(req.params.id);
+        if (req.calendarChild) {
+            if (!event || event.status !== 'APPROVED' || Number(event.is_admin_event)) return apiError(res, 404, 'Мероприятие не найдено');
+            if (!eventTargetsPeople(event, [req.calendarChild])) {
+                const [rows] = await pool.query('SELECT 1 FROM event_participants WHERE event_id=? AND user_id=?', [event.id, req.calendarChild.id]);
+                if (!rows.length) return apiError(res, 404, 'Мероприятие не найдено');
+            }
+            return res.json((await enrichEvents([event]))[0]);
+        }
         const access=await mainportalEventAccess(pool,ssoPool,Number(user(req).id),event,Number(process.env.SSO_SERVICE_ID));
         if (!event || !access.read && !(await eventVisibleTo(event, user(req)))) return apiError(res, 404, 'Мероприятие не найдено');
         res.json({...((await enrichEvents([event]))[0]), can_approve_assigned:access.approve});
