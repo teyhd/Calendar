@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { bindPortalSession, isPortalSessionActive, PortalSessionUnavailable } from './portalSession.mjs';
 
 const stateCookieName = 'calendar.auth.state';
 const allowedRoles = new Set([1, 2, 3, 4, 5, 6]);
@@ -21,6 +22,7 @@ export function getAuthConfig() {
         ssoBaseURL: env('SSO_BASE_URL', 'https://platoniks.ru/sso').replace(/\/+$/, ''),
         clientID: env('SSO_CLIENT_ID', 'calendar'),
         clientSecret: env('SSO_CLIENT_SECRET'),
+        requireRevocable: env('SSO_REQUIRE_REVOCABLE') === '1',
         callbackURL: env('SSO_CALLBACK_URL', 'https://event.platoniks.ru/api/cb'),
         serviceID: Number(env('SSO_SERVICE_ID')),
         jwtSecret: env('JWT_SECRET'),
@@ -48,18 +50,26 @@ export async function loadAuthUser(req) {
     const cfg = getAuthConfig();
     const raw = req.cookies?.[cfg.sessionCookieName];
     if (!raw || !cfg.sessionSecret) return null;
-    const payload = verifySignedValue(raw, cfg.sessionSecret);
-    if (!payload || Number(payload.exp || 0) <= Math.floor(Date.now() / 1_000)) return null;
+    const payload = readSignedSession(raw, cfg.sessionSecret);
+    if (!payload || !await isPortalSessionActive(payload.portal, payload.uid, cfg)) return null;
     const { getCalendarAuthIdentity } = await import('./sso.mjs');
     return resolveCalendarSessionActor(payload,await getCalendarAuthIdentity(payload.uid));
 }
 
 export async function attachAuthUser(req, res, next) {
     try {
+        if (/^\/api\/(?:cb|auth\/(?:login|logout))\/?$/i.test(req.path)) return next();
         req.authUser = await loadAuthUser(req);
-        next();
+        const cfg = getAuthConfig();
+        if (!req.authUser && req.cookies?.[cfg.sessionCookieName]) {
+            res.clearCookie(cfg.sessionCookieName, cookieOptions(req));
+        }
+        return next();
     } catch (error) {
-        next(error);
+        if (!(error instanceof PortalSessionUnavailable)) return next(error);
+        res.set('Cache-Control', 'no-store');
+        if (req.path.startsWith('/api/')) return res.status(503).json({ error: error.code });
+        return res.status(503).send('Проверка школьного входа временно недоступна. Попробуйте позднее.');
     }
 }
 
@@ -110,8 +120,8 @@ async function authCallbackHandler(req, res) {
         return res.status(400).json({ error: 'state_mismatch' });
     }
     try {
-        const token = await exchangeCodeForToken(code, cfg);
-        const session = await buildAuthorizedCalendarSession(token, cfg);
+        const tokens = await exchangeCodeForToken(code, cfg);
+        const session = await buildAuthorizedCalendarSession(tokens.access_token, cfg, null, tokens);
         clearAuthCookies(req, res);
         res.cookie(cfg.sessionCookieName, session, cookieOptions(req, { maxAge: cfg.sessionTTL }));
         res.clearCookie(stateCookieName, cookieOptions(req));
@@ -129,7 +139,7 @@ function authLogoutHandler(req, res) {
 }
 
 async function currentUserHandler(req, res) {
-    const user = req.authUser || await loadAuthUser(req);
+    const user = req.authUser === undefined ? await loadAuthUser(req) : req.authUser;
     if (!user) return res.status(401).json({ authenticated: false, login_url: '/api/auth/login' });
     res.json({ authenticated: true, user: { id: user.id, name: user.name, role_id: user.type, role: roleLabel(user.type) }, permissions: user.permissions });
 }
@@ -140,7 +150,7 @@ async function exchangeCodeForToken(code, cfg) {
     if (!response.ok) throw new Error(`token endpoint status=${response.status}`);
     const parsed = await response.json();
     if (!parsed.access_token) throw new Error('empty access_token');
-    return parsed.access_token;
+    return parsed;
 }
 
 export function calendarPermissions(roleId) {
@@ -179,12 +189,13 @@ export function verifyHS256JWT(token, secret) {
     return claims;
 }
 
-export function buildSessionFromToken(token, cfg = getAuthConfig(), identity = null) {
+export function buildSessionFromToken(token, cfg = getAuthConfig(), identity = null, tokens = {}) {
     const claims = verifyHS256JWT(token, cfg.jwtSecret);
     if (String(claims.aud || '') !== cfg.clientID) throw new Error('jwt audience mismatch');
     const roleId = extractServiceRoleID(claims.right, cfg.serviceID);
     if (!allowedRoles.has(roleId) || !Number(claims.sub)) throw new Error('no calendar role');
     const payload={ uid: Number(claims.sub), role_id: roleId, exp: Math.floor((Date.now() + cfg.sessionTTL) / 1_000) };
+    payload.portal = bindPortalSession(tokens, claims, cfg);
     if (identity) {
         payload.claimed_roles=[...new Set(claims.right.filter(row=>{
             const explicit=Object.prototype.hasOwnProperty.call(row||{},'srv_id');
@@ -208,13 +219,13 @@ export function resolveCalendarSessionActor(payload,identity) {
     return {...identity,type:roleId,roles,permissions:calendarPermissions(roleId),raw_role_id:roleId};
 }
 
-export async function buildAuthorizedCalendarSession(token,cfg=getAuthConfig(),loader=null) {
+export async function buildAuthorizedCalendarSession(token,cfg=getAuthConfig(),loader=null,tokens={}) {
     const claims=verifyHS256JWT(token,cfg.jwtSecret);
     if (String(claims.aud||'')!==cfg.clientID) throw new Error('jwt audience mismatch');
     const load=loader||(await import('./sso.mjs')).getCalendarAuthIdentity;
     const identity=await load(Number(claims.sub));
     if (!identity) throw new Error('no active calendar role');
-    return buildSessionFromToken(token,cfg,identity);
+    return buildSessionFromToken(token,cfg,identity,tokens);
 }
 
 export function readSignedSession(value, secret) {
