@@ -1,3 +1,5 @@
+import { approvedPreviewAccount, registerRolePreview } from './vendor/rolePreview.mjs';
+import { getCalendarAuthIdentity } from './vendor/sso.mjs';
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import { engine } from 'express-handlebars';
@@ -12,7 +14,7 @@ import { registerMainportalContext, mainportalEventAccess } from './vendor/mainp
 import { mlog } from './vendor/logs.js';
 import { registerHelpers } from './vendor/hlp.mjs';
 import {
-    attachAuthUser,
+    attachAuthUser, resolveCalendarSessionActor,
     requireApiAuth,
     requirePageAuth,
     requirePermission,
@@ -144,7 +146,31 @@ app.use(express.urlencoded({ extended: true, limit: '512kb' }));
 app.use(express.json({ limit: '512kb' }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
-app.use(attachAuthUser);
+const previewReadRoutes = new Set([
+    '/', '/api/me', '/api/workspace/events', '/api/workspace', '/api/events', '/api/event-form-options',
+    '/api/notifications', '/notifications/all', '/api/analytics', '/reviews',
+    '/my-events', '/child-events', '/events/archive', '/analytics', '/events/create',
+]);
+registerRolePreview(app, {
+    key: process.env.MAINPORTAL_CONTEXT_KEY,
+    origin: 'https://event.platoniks.ru',
+    async resolve(actorId, subjectId) {
+        const account = await approvedPreviewAccount(ssoPool, actorId, subjectId, Number(process.env.SSO_SERVICE_ID));
+        if (!account) return null;
+        const identity = await getCalendarAuthIdentity(subjectId);
+        if (!identity || identity.roles.some(role => role === 5 || role === 7)) return null;
+        return resolveCalendarSessionActor({ uid: subjectId, claimed_roles: identity.roles }, identity);
+    },
+    entry: (user, childId) => user.permissions.view_children && childId ? '/?view=children&child_id=' + childId : '/',
+    allowRead: route => previewReadRoutes.has(route) || /^\/api\/events\/\d+(?:\/(?:approvals|is-registered|participants))?$/.test(route)
+        || /^\/events\/(?:edit|copy)\/\d+$/.test(route),
+    audit: ({ actorId, subjectId }) => mlog('[INFO]', 'role_preview_open actor=' + actorId + ' subject=' + subjectId),
+});
+app.use((req, res, next) => {
+    if (!req.rolePreview) return attachAuthUser(req, res, next);
+    req.authUser = req.rolePreview;
+    return next();
+});
 setupAuthRoutes(app);
 
 // Legacy bookmark URLs are redirects only; they never process local credentials.
